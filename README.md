@@ -18,12 +18,15 @@ A comprehensive system for monitoring student attendance at events using RFID ch
 ## Requirements
 
 - macOS (tested on macOS Monterey and above)
+- Windows 10/11 (see Windows instructions below)
 - Python 3.10 (with Tkinter support)
-- Homebrew (for CMake and Python installation)
+- Homebrew (for CMake and Python installation on macOS)
 - USB Webcam(s)
 - (Optional) USB RFID Reader
 
 ## Installation
+
+### On macOS
 
 1. **Clone this repository**
 2. **Run the setup script (recommended):**
@@ -37,6 +40,41 @@ A comprehensive system for monitoring student attendance at events using RFID ch
    - Install all dependencies, including dlib and face_recognition_models
 
    If you prefer manual setup, see the `setup.sh` file for step-by-step commands.
+
+### On Windows
+
+1. **Install Python 3.10**
+   - Download and install Python 3.10 from the [official website](https://www.python.org/downloads/release/python-3100/).
+   - Make sure to check "Add Python to PATH" during installation.
+2. **Install CMake**
+   - Download and install CMake from [cmake.org](https://cmake.org/download/).
+   - Add CMake to your system PATH if not done automatically.
+3. **Install Visual Studio Build Tools**
+   - Download and install [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+   - During installation, select the "Desktop development with C++" workload.
+4. **Clone this repository**
+   ```sh
+   git clone https://github.com/ZACHARY2215/attendance-checker.git
+   cd attendance-checker
+   ```
+5. **Create and activate a virtual environment**
+   ```sh
+   python -m venv venv
+   venv\Scripts\activate
+   ```
+6. **Upgrade pip**
+   ```sh
+   python -m pip install --upgrade pip
+   ```
+7. **Install dependencies**
+   ```sh
+   pip install cmake
+   pip install dlib
+   pip install git+https://github.com/ageitgey/face_recognition_models
+   pip install -r requirements.txt
+   ```
+   - If you encounter issues with `dlib`, ensure CMake and Visual Studio Build Tools are correctly installed and on your PATH.
+   - If you have issues with `face_recognition`, try installing the wheel from [PyPI](https://pypi.org/project/face-recognition/) or [Unofficial Windows Binaries for Python Extension Packages](https://www.lfd.uci.edu/~gohlke/pythonlibs/#dlib).
 
 ## Configuration
 
@@ -57,9 +95,14 @@ A comprehensive system for monitoring student attendance at events using RFID ch
 ## Usage
 
 1. **Activate the virtual environment:**
-   ```bash
-   source venv/bin/activate
-   ```
+   - On macOS/Linux:
+     ```bash
+     source venv/bin/activate
+     ```
+   - On Windows:
+     ```cmd
+     venv\Scripts\activate
+     ```
 2. **Launch the GUI:**
    ```bash
    python gui.py
@@ -80,7 +123,7 @@ A comprehensive system for monitoring student attendance at events using RFID ch
 - `students.csv`: Student database
 - `attendance.xlsx`: Real-time attendance log
 - `faces/`: Directory for storing reference face snapshots and encodings
-- `setup.sh`: Automated environment and dependency setup
+- `setup.sh`: Automated environment and dependency setup (macOS)
 
 ## Attendance Log Format
 
@@ -94,7 +137,7 @@ The `attendance.xlsx` file contains:
 
 ## Troubleshooting
 
-- If you encounter issues with dlib or face_recognition installation, ensure CMake and Python 3.10 (with Tkinter) are installed via Homebrew.
+- If you encounter issues with dlib or face_recognition installation, ensure CMake and Python 3.10 (with Tkinter) are installed (and Visual Studio Build Tools on Windows).
 - For camera errors, ensure your webcam is connected and accessible.
 - For Google Sheets sync, follow the setup instructions in `sheets_sync.py`.
 
