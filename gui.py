@@ -3,7 +3,7 @@ from tkinter import ttk, messagebox
 import cv2
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import os
 import face_recognition
@@ -40,6 +40,213 @@ class DarkTheme:
     BUTTON_RADIUS = 8  # New radius for rounded corners
     BUTTON_SHADOW = '0 2 4 #00000033'  # Subtle shadow
     TRANSITION_TIME = '0.2s'  # Smooth transition time
+
+class CustomCalendar(tk.Toplevel):
+    def __init__(self, parent, date_var):
+        super().__init__(parent)
+        self.date_var = date_var
+        self.title("Select Date")
+        self.configure(bg=DarkTheme.CARD_BG)
+        self.resizable(False, False)
+        self.grab_set()  # Make the dialog modal
+        
+        # Get current date from date_var or use today
+        try:
+            current_date = datetime.strptime(date_var.get(), '%Y-%m-%d')
+        except:
+            current_date = datetime.now()
+        
+        self.year = current_date.year
+        self.month = current_date.month
+        
+        # Header frame
+        header_frame = tk.Frame(self, bg=DarkTheme.CARD_BG)
+        header_frame.pack(fill='x', padx=10, pady=5)
+        
+        # Previous month button
+        prev_btn = customtkinter.CTkButton(
+            header_frame,
+            text="<",
+            command=self.prev_month,
+            width=30,
+            height=30,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=11)
+        )
+        prev_btn.pack(side='left', padx=5)
+        
+        # Month and year label
+        self.header_label = tk.Label(
+            header_frame,
+            text="",
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.FG,
+            font=(DarkTheme.FONT, 12, 'bold')
+        )
+        self.header_label.pack(side='left', expand=True)
+        
+        # Next month button
+        next_btn = customtkinter.CTkButton(
+            header_frame,
+            text=">",
+            command=self.next_month,
+            width=30,
+            height=30,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=11)
+        )
+        next_btn.pack(side='right', padx=5)
+        
+        # Calendar frame
+        calendar_frame = tk.Frame(self, bg=DarkTheme.CARD_BG)
+        calendar_frame.pack(padx=10, pady=5)
+        
+        # Weekday headers
+        weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        for i, day in enumerate(weekdays):
+            tk.Label(
+                calendar_frame,
+                text=day,
+                width=4,
+                bg=DarkTheme.CARD_BG,
+                fg=DarkTheme.FG,
+                font=(DarkTheme.FONT, 10)
+            ).grid(row=0, column=i, padx=2, pady=2)
+        
+        # Create buttons for days
+        self.day_buttons = []
+        for week in range(6):
+            for day in range(7):
+                btn = customtkinter.CTkButton(
+                    calendar_frame,
+                    text="",
+                    width=40,
+                    height=30,
+                    fg_color=DarkTheme.BUTTON_BG,
+                    hover_color=DarkTheme.BUTTON_HOVER,
+                    bg_color=DarkTheme.CARD_BG,
+                    text_color=DarkTheme.FG,
+                    font=customtkinter.CTkFont(family=DarkTheme.FONT, size=10),
+                    command=lambda w=week, d=day: self.select_date(w, d)
+                )
+                btn.grid(row=week + 1, column=day, padx=2, pady=2)
+                self.day_buttons.append(btn)
+        
+        # Year selection
+        year_frame = tk.Frame(self, bg=DarkTheme.CARD_BG)
+        year_frame.pack(fill='x', padx=10, pady=5)
+        
+        prev_year_btn = customtkinter.CTkButton(
+            year_frame,
+            text="◀",
+            command=self.prev_year,
+            width=30,
+            height=30,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=11)
+        )
+        prev_year_btn.pack(side='left', padx=5)
+        
+        self.year_label = tk.Label(
+            year_frame,
+            text=str(self.year),
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.FG,
+            font=(DarkTheme.FONT, 12, 'bold')
+        )
+        self.year_label.pack(side='left', expand=True)
+        
+        next_year_btn = customtkinter.CTkButton(
+            year_frame,
+            text="▶",
+            command=self.next_year,
+            width=30,
+            height=30,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=11)
+        )
+        next_year_btn.pack(side='right', padx=5)
+        
+        self.update_calendar()
+        
+        # Position the calendar near the entry widget
+        self.geometry(f"+{parent.winfo_rootx()}+{parent.winfo_rooty() + 50}")
+    
+    def update_calendar(self):
+        # Update header
+        month_name = datetime(2000, self.month, 1).strftime('%B')
+        self.header_label.config(text=month_name)
+        self.year_label.config(text=str(self.year))
+        
+        # Get first day of the month and number of days
+        first_day = datetime(self.year, self.month, 1)
+        last_day = (datetime(self.year, self.month + 1, 1) if self.month < 12 
+                   else datetime(self.year + 1, 1, 1)) - timedelta(days=1)
+        num_days = last_day.day
+        
+        # Adjust for Monday as first day of week
+        first_weekday = first_day.weekday()
+        
+        # Clear all buttons
+        for btn in self.day_buttons:
+            btn.configure(text="", state="disabled", fg_color=DarkTheme.BUTTON_BG)
+        
+        # Fill in the days
+        for i in range(num_days):
+            day = i + 1
+            button_index = first_weekday + i
+            if button_index < len(self.day_buttons):
+                self.day_buttons[button_index].configure(
+                    text=str(day),
+                    state="normal",
+                    fg_color=DarkTheme.BUTTON_BG
+                )
+    
+    def select_date(self, week, day):
+        button_index = week * 7 + day
+        if button_index < len(self.day_buttons):
+            btn = self.day_buttons[button_index]
+            if btn.cget("state") != "disabled":
+                day = int(btn.cget("text"))
+                selected_date = datetime(self.year, self.month, day)
+                self.date_var.set(selected_date.strftime('%Y-%m-%d'))
+                self.destroy()
+    
+    def prev_month(self):
+        if self.month > 1:
+            self.month -= 1
+        else:
+            self.month = 12
+            self.year -= 1
+        self.update_calendar()
+    
+    def next_month(self):
+        if self.month < 12:
+            self.month += 1
+        else:
+            self.month = 1
+            self.year += 1
+        self.update_calendar()
+    
+    def prev_year(self):
+        self.year -= 1
+        self.update_calendar()
+    
+    def next_year(self):
+        self.year += 1
+        self.update_calendar()
 
 class NotificationPopup:
     def __init__(self, root, message, level='info', duration=4000):
@@ -948,6 +1155,24 @@ class AttendanceGUI:
             border_color=DarkTheme.BUTTON_BG
         )
         date_entry.pack(side='left')
+        
+        # Calendar button
+        calendar_btn = customtkinter.CTkButton(
+            date_frame,
+            text="📅",
+            command=lambda: CustomCalendar(self.root, self.date_var),
+            width=32,
+            height=32,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=14)
+        )
+        calendar_btn.pack(side='left', padx=5)
+        
+        # Add trace to date_var to auto-refresh report
+        self.date_var.trace_add('write', lambda *args: self.refresh_report())
         
         # Time range filter
         time_frame = ttk.Frame(filters_frame, style='Card.TFrame')
