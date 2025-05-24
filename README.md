@@ -84,6 +84,8 @@ A comprehensive system for monitoring student attendance at events using RFID ch
    pip install git+https://github.com/ageitgey/face_recognition_models
    pip install -r requirements.txt
    pip install reportlab
+   pip install --upgrade setuptools
+   pip install customtkinter
    ```
    - If you encounter issues with `dlib`, ensure CMake and Visual Studio Build Tools are correctly installed and on your PATH.
    - If you have issues with `face_recognition`, try installing the wheel from [PyPI](https://pypi.org/project/face-recognition/) or [Unofficial Windows Binaries for Python Extension Packages](https://www.lfd.uci.edu/~gohlke/pythonlibs/#dlib).
