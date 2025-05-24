@@ -9,16 +9,22 @@ import os
 import face_recognition
 from PIL import Image, ImageTk
 import numpy as np
+import customtkinter
 
 class DarkTheme:
     BG = '#23272e'
     FG = '#f8f9fa'
     BUTTON_BG = '#343a40'
     BUTTON_FG = '#f8f9fa'
+    BUTTON_HOVER = '#424a53'  # New hover color
     ACCENT = '#007ACC'
+    ACCENT_HOVER = '#0090EA'  # New hover color for accent
     SUCCESS = '#28a745'
+    SUCCESS_HOVER = '#2fc751'  # New hover color for success
     WARNING = '#ffc107'
+    WARNING_HOVER = '#ffcd39'  # New hover color for warning
     ERROR = '#dc3545'
+    ERROR_HOVER = '#e04757'  # New hover color for error
     SIDEBAR_BG = '#181a1b'
     SIDEBAR_ACTIVE = '#007ACC'
     CARD_BG = '#2c313a'
@@ -27,6 +33,11 @@ class DarkTheme:
     NOTIF_BG = '#23272e'
     NOTIF_FG = '#f8f9fa'
     FONT = 'Arial'
+    BUTTON_FONT = ('Arial', 11, 'bold')
+    BUTTON_PADDING = 8
+    BUTTON_RADIUS = 8  # New radius for rounded corners
+    BUTTON_SHADOW = '0 2 4 #00000033'  # Subtle shadow
+    TRANSITION_TIME = '0.2s'  # Smooth transition time
 
 class NotificationPopup:
     def __init__(self, root, message, level='info', duration=4000):
@@ -59,6 +70,26 @@ class AttendanceGUI:
         self.root.configure(bg=DarkTheme.BG)
         self.root.option_add("*Font", f"{DarkTheme.FONT} 11")
         
+        # Configure customtkinter
+        customtkinter.set_appearance_mode("dark")
+        customtkinter.set_default_color_theme("blue")
+        
+        # Set default customtkinter button properties
+        customtkinter.set_widget_scaling(1.0)  # Ensure proper scaling
+        customtkinter.set_window_scaling(1.0)  # Ensure proper window scaling
+        
+        # Create custom button style
+        self.create_custom_buttons()
+        
+        # Define standard button properties
+        self.button_props = {
+            'corner_radius': 10,
+            'border_width': 0,
+            'font': customtkinter.CTkFont(family=DarkTheme.FONT, size=11, weight="bold"),
+            'hover': True,
+            'border_spacing': 10
+        }
+        
         # Camera and thread control
         self.camera = None
         self.camera_lock = threading.Lock()
@@ -68,27 +99,6 @@ class AttendanceGUI:
         self.camera_thread = None
         self.monitoring_active = False
         self.monitoring_thread = None
-        
-        # Style
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure('Dark.TFrame', background=DarkTheme.BG)
-        style.configure('Card.TFrame', background=DarkTheme.CARD_BG)
-        style.configure('Sidebar.TFrame', background=DarkTheme.SIDEBAR_BG)
-        style.configure('Header.TFrame', background=DarkTheme.HEADER_BG)
-        style.configure('Header.TLabel', background=DarkTheme.HEADER_BG, foreground=DarkTheme.HEADER_FG, font=(DarkTheme.FONT, 20, 'bold'))
-        style.configure('Sidebar.TButton', background=DarkTheme.SIDEBAR_BG, foreground=DarkTheme.FG, font=(DarkTheme.FONT, 12, 'bold'), borderwidth=0, relief='flat')
-        style.map('Sidebar.TButton', background=[('active', DarkTheme.SIDEBAR_ACTIVE), ('selected', DarkTheme.SIDEBAR_ACTIVE)])
-        style.configure('SidebarActive.TButton', background=DarkTheme.SIDEBAR_ACTIVE, foreground=DarkTheme.FG, font=(DarkTheme.FONT, 12, 'bold'), borderwidth=0, relief='flat')
-        style.configure('Dark.TLabel', background=DarkTheme.BG, foreground=DarkTheme.FG)
-        style.configure('Card.TLabel', background=DarkTheme.CARD_BG, foreground=DarkTheme.FG)
-        style.configure('Dark.TEntry', fieldbackground=DarkTheme.CARD_BG, foreground=DarkTheme.FG, borderwidth=1)
-        style.configure('Dark.TButton', background=DarkTheme.BUTTON_BG, foreground=DarkTheme.BUTTON_FG, font=(DarkTheme.FONT, 11, 'bold'), borderwidth=0, relief='flat')
-        style.map('Dark.TButton', background=[('active', DarkTheme.ACCENT)])
-        style.configure('Success.TButton', background=DarkTheme.SUCCESS, foreground=DarkTheme.BUTTON_FG)
-        style.configure('Warning.TButton', background=DarkTheme.WARNING, foreground=DarkTheme.BUTTON_FG)
-        style.configure('Dark.Treeview', background=DarkTheme.CARD_BG, foreground=DarkTheme.FG, fieldbackground=DarkTheme.CARD_BG, rowheight=28, font=(DarkTheme.FONT, 11))
-        style.configure('Dark.Treeview.Heading', background=DarkTheme.BUTTON_BG, foreground=DarkTheme.FG, font=(DarkTheme.FONT, 12, 'bold'))
         
         # Create faces directory if it doesn't exist
         os.makedirs('faces', exist_ok=True)
@@ -112,31 +122,147 @@ class AttendanceGUI:
         self.active_tab = 'Check-in'
         self.create_modern_gui()
         
+    def create_custom_buttons(self):
+        """Configure styles for all widgets to match dark theme"""
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # Configure frame styles
+        style.configure('Dark.TFrame', background=DarkTheme.BG)
+        style.configure('Card.TFrame', background=DarkTheme.CARD_BG)
+        style.configure('Header.TFrame', background=DarkTheme.HEADER_BG)
+        
+        # Configure label styles
+        style.configure('Dark.TLabel',
+                       background=DarkTheme.BG,
+                       foreground=DarkTheme.FG)
+        style.configure('Card.TLabel',
+                       background=DarkTheme.CARD_BG,
+                       foreground=DarkTheme.FG)
+        style.configure('Header.TLabel',
+                       background=DarkTheme.HEADER_BG,
+                       foreground=DarkTheme.HEADER_FG,
+                       font=(DarkTheme.FONT, 20, 'bold'))
+        
+        # Configure entry style
+        style.configure('Dark.TEntry',
+                       fieldbackground=DarkTheme.CARD_BG,
+                       foreground=DarkTheme.FG,
+                       insertcolor=DarkTheme.FG,
+                       borderwidth=1)
+        
+        # Configure modern treeview style
+        style.configure('Dark.Treeview',
+                       background=DarkTheme.CARD_BG,
+                       foreground=DarkTheme.FG,
+                       fieldbackground=DarkTheme.CARD_BG,
+                       borderwidth=0,
+                       font=(DarkTheme.FONT, 11),
+                       rowheight=40)
+        
+        style.configure('Dark.Treeview.Heading',
+                       background=DarkTheme.BUTTON_BG,
+                       foreground=DarkTheme.FG,
+                       borderwidth=0,
+                       font=(DarkTheme.FONT, 12, 'bold'),
+                       padding=10)
+        
+        # Remove borders and configure selection
+        style.layout('Dark.Treeview', [
+            ('Treeview.treearea', {'sticky': 'nswe'})
+        ])
+        
+        # Configure selection colors
+        style.map('Dark.Treeview',
+                 background=[('selected', DarkTheme.ACCENT),
+                           ('!selected', DarkTheme.CARD_BG)],
+                 foreground=[('selected', DarkTheme.FG)])
+        
+        # Configure heading style
+        style.layout("Dark.Treeview.Heading", [
+            ("Treeheading.cell", {"sticky": "nswe"}),
+            ("Treeheading.border", {"sticky": "nswe", "children": [
+                ("Treeheading.padding", {"sticky": "nswe", "children": [
+                    ("Treeheading.image", {"side": "right", "sticky": ""}),
+                    ("Treeheading.text", {"sticky": "we"})
+                ]})
+            ]})
+        ])
+        
+        style.map("Dark.Treeview.Heading",
+                 background=[("", DarkTheme.BUTTON_BG)],
+                 foreground=[("", DarkTheme.FG)])
+                 
+        # Configure row colors
+        style.map('Dark.Treeview',
+                 background=[('selected', DarkTheme.ACCENT),
+                           ('!selected', DarkTheme.CARD_BG)],
+                 foreground=[('selected', DarkTheme.FG)])
+        
+        # Configure scrollbar style
+        style.configure('Dark.Vertical.TScrollbar',
+                       background=DarkTheme.CARD_BG,
+                       borderwidth=0,
+                       arrowcolor=DarkTheme.FG,
+                       troughcolor=DarkTheme.BG)
+        
+        # Configure scrollbar layout
+        style.layout('Dark.Vertical.TScrollbar', 
+                 [('Vertical.Scrollbar.trough',
+                   {'children': [('Vertical.Scrollbar.thumb', 
+                                {'expand': '1'})],
+                    'sticky': 'ns'})])
+        
+        # Remove borders from frames
+        style.configure('TFrame', borderwidth=0)
+        
+        # Configure separator style
+        style.configure('TSeparator', background=DarkTheme.BUTTON_BG)
+
     def create_modern_gui(self):
         # Header bar
         header = ttk.Frame(self.root, style='Header.TFrame', height=60)
         header.pack(side='top', fill='x')
         ttk.Label(header, text="Attendance Monitoring System", style='Header.TLabel').pack(side='left', padx=30, pady=10)
-        # Sidebar
-        sidebar = ttk.Frame(self.root, style='Sidebar.TFrame', width=180)
+        
+        # Sidebar with tk.Frame
+        sidebar = tk.Frame(self.root, bg=DarkTheme.SIDEBAR_BG, width=180)
         sidebar.pack(side='left', fill='y')
+        sidebar.pack_propagate(False)
+        
         self.sidebar_buttons = {}
         for tab, icon in zip(['Check-in', 'Monitoring', 'Reports', 'Quit'], ['📝', '🎥', '📊', '🚪']):
-            btn_style = 'SidebarActive.TButton' if tab == self.active_tab else 'Sidebar.TButton'
-            b = ttk.Button(sidebar, text=f"{icon}  {tab}", style=btn_style, command=lambda t=tab: self.switch_tab(t))
-            b.pack(fill='x', pady=6, padx=10, ipady=6)
-            self.sidebar_buttons[tab] = b
+            btn = customtkinter.CTkButton(
+                sidebar,
+                text=f"{icon}  {tab}",
+                command=lambda t=tab: self.switch_tab(t),
+                fg_color=DarkTheme.SIDEBAR_BG if tab != self.active_tab else DarkTheme.SIDEBAR_ACTIVE,
+                hover_color=DarkTheme.SIDEBAR_ACTIVE,
+                bg_color=DarkTheme.SIDEBAR_BG,  # Match sidebar background
+                width=160,
+                height=40,
+                corner_radius=8,
+                border_width=0,
+                font=customtkinter.CTkFont(family=DarkTheme.FONT, size=12),
+                hover=True
+            )
+            btn.pack(pady=6, padx=10)
+            self.sidebar_buttons[tab] = btn
+        
         # Main content area
         self.main_content = ttk.Frame(self.root, style='Dark.TFrame')
         self.main_content.pack(side='left', fill='both', expand=True, padx=0, pady=0)
+        
         self.tab_frames = {}
         for tab in ['Check-in', 'Monitoring', 'Reports']:
             frame = ttk.Frame(self.main_content, style='Dark.TFrame')
             self.tab_frames[tab] = frame
+        
         self.setup_check_in_tab(self.tab_frames['Check-in'])
         self.setup_monitoring_tab(self.tab_frames['Monitoring'])
         self.setup_reports_tab(self.tab_frames['Reports'])
         self.show_tab('Check-in')
+        
         # Notification bar
         self.setup_notification_bar()
         
@@ -144,9 +270,16 @@ class AttendanceGUI:
         if tab == 'Quit':
             self.quit_application()
             return
+            
         self.active_tab = tab
+        # Update button styles
         for t, btn in self.sidebar_buttons.items():
-            btn.configure(style='SidebarActive.TButton' if t == tab else 'Sidebar.TButton')
+            if t != 'Quit':  # Don't change the quit button style
+                if t == tab:
+                    btn.configure(fg_color=DarkTheme.SIDEBAR_ACTIVE)
+                else:
+                    btn.configure(fg_color=DarkTheme.SIDEBAR_BG)
+        
         self.show_tab(tab)
         
     def show_tab(self, tab):
@@ -160,6 +293,7 @@ class AttendanceGUI:
         card.pack(fill='both', expand=True, padx=40, pady=40)
         card.grid_columnconfigure(0, weight=2)
         card.grid_columnconfigure(1, weight=1)
+        
         # Left side - Camera
         camera_frame = ttk.Frame(card, style='Card.TFrame')
         camera_frame.grid(row=0, column=0, sticky='nsew', padx=20, pady=20)
@@ -167,100 +301,192 @@ class AttendanceGUI:
         camera_header.pack(anchor='w', pady=(0, 10))
         self.camera_label = ttk.Label(camera_frame, style='Card.TLabel')
         self.camera_label.pack(pady=10)
-        # Camera controls
+        
+        # Camera controls with tk.Frame
         camera_controls = ttk.Frame(camera_frame, style='Card.TFrame')
         camera_controls.pack(pady=10)
-        self.checkin_start_button = ttk.Button(camera_controls, 
-                                             text="Start Camera", 
-                                             style='Success.TButton',
-                                             command=self.start_checkin_camera)
+        
+        self.checkin_start_button = customtkinter.CTkButton(
+            camera_controls,
+            text="Start Camera",
+            command=self.start_checkin_camera,
+            fg_color=DarkTheme.SUCCESS,
+            hover_color=DarkTheme.SUCCESS_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=120,
+            **self.button_props
+        )
         self.checkin_start_button.pack(side='left', padx=5)
-        self.checkin_stop_button = ttk.Button(camera_controls, 
-                                            text="Stop Camera", 
-                                            style='Warning.TButton',
-                                            command=self.stop_checkin_camera)
-        self.capture_button = ttk.Button(camera_controls, 
-                                       text="Capture Face", 
-                                       style='Dark.TButton',
-                                       command=self.capture_face)
+        
+        self.checkin_stop_button = customtkinter.CTkButton(
+            camera_controls,
+            text="Stop Camera",
+            command=self.stop_checkin_camera,
+            fg_color=DarkTheme.WARNING,
+            hover_color=DarkTheme.WARNING_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=120,
+            **self.button_props
+        )
+        
+        self.capture_button = customtkinter.CTkButton(
+            camera_controls,
+            text="Capture Face",
+            command=self.capture_face,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=120,
+            **self.button_props
+        )
         self.capture_button.pack(side='left', padx=5)
+        
         # Right side - Registration and Check-in
         control_frame = ttk.Frame(card, style='Card.TFrame')
         control_frame.grid(row=0, column=1, sticky='nsew', padx=20, pady=20)
-        # Registration section
-        reg_header = ttk.Label(control_frame, text="New Student Registration", style='Card.TLabel', font=(DarkTheme.FONT, 14, 'bold'))
-        reg_header.pack(anchor='w', pady=(0, 8))
+        
+        # Registration section with tk.Frame
         reg_frame = ttk.Frame(control_frame, style='Card.TFrame')
         reg_frame.pack(fill='x', pady=8)
+        
+        reg_header = ttk.Label(control_frame, text="New Student Registration", 
+                             style='Card.TLabel', font=(DarkTheme.FONT, 14, 'bold'))
+        reg_header.pack(anchor='w', pady=(0, 8))
+        
         ttk.Label(reg_frame, text="Student ID:", style='Card.TLabel').pack(anchor='w', pady=2)
         self.reg_id_var = tk.StringVar()
         ttk.Entry(reg_frame, textvariable=self.reg_id_var, style='Dark.TEntry').pack(fill='x', pady=2)
+        
         ttk.Label(reg_frame, text="Name:", style='Card.TLabel').pack(anchor='w', pady=2)
         self.reg_name_var = tk.StringVar()
         ttk.Entry(reg_frame, textvariable=self.reg_name_var, style='Dark.TEntry').pack(fill='x', pady=2)
-        ttk.Button(reg_frame, text="Register", style='Dark.TButton',
-                  command=self.register_student).pack(pady=8, fill='x')
+        
+        register_btn = customtkinter.CTkButton(
+            reg_frame,
+            text="Register",
+            command=self.register_student,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=200,
+            **self.button_props
+        )
+        register_btn.pack(pady=8)
+        
         # Separator
         ttk.Separator(control_frame, orient='horizontal').pack(fill='x', pady=16)
-        # Check-in section
-        checkin_header = ttk.Label(control_frame, text="Check-in", style='Card.TLabel', font=(DarkTheme.FONT, 14, 'bold'))
-        checkin_header.pack(anchor='w', pady=(0, 8))
+        
+        # Check-in section with tk.Frame
         checkin_frame = ttk.Frame(control_frame, style='Card.TFrame')
         checkin_frame.pack(fill='x', pady=8)
+        
+        checkin_header = ttk.Label(control_frame, text="Check-in", 
+                                 style='Card.TLabel', font=(DarkTheme.FONT, 14, 'bold'))
+        checkin_header.pack(anchor='w', pady=(0, 8))
+        
         ttk.Label(checkin_frame, text="Student ID:", style='Card.TLabel').pack(anchor='w', pady=2)
         self.student_id_var = tk.StringVar()
         ttk.Entry(checkin_frame, textvariable=self.student_id_var, style='Dark.TEntry').pack(fill='x', pady=2)
-        ttk.Button(checkin_frame, text="Mock RFID Scan", style='Dark.TButton',
-                  command=self.mock_rfid_scan).pack(pady=4, fill='x')
-        ttk.Button(checkin_frame, text="Check In", style='Dark.TButton',
-                  command=self.process_check_in).pack(pady=4, fill='x')
+        
+        mock_rfid_btn = customtkinter.CTkButton(
+            checkin_frame,
+            text="Mock RFID Scan",
+            command=self.mock_rfid_scan,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=200,
+            **self.button_props
+        )
+        mock_rfid_btn.pack(pady=4)
+        
+        checkin_btn = customtkinter.CTkButton(
+            checkin_frame,
+            text="Check In",
+            command=self.process_check_in,
+            fg_color=DarkTheme.ACCENT,
+            hover_color=DarkTheme.ACCENT_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=200,
+            **self.button_props
+        )
+        checkin_btn.pack(pady=4)
     
     def setup_monitoring_tab(self, parent):
         # Card-like main container
         card = ttk.Frame(parent, style='Card.TFrame')
         card.pack(fill='both', expand=True, padx=40, pady=40)
+        
         # Header
         header = ttk.Label(card, text="Monitoring", style='Card.TLabel', font=(DarkTheme.FONT, 16, 'bold'))
         header.pack(anchor='w', pady=(0, 16))
+        
         # Status and controls card
         status_card = ttk.Frame(card, style='Card.TFrame')
         status_card.pack(fill='x', pady=(0, 20))
         status_card.columnconfigure(0, weight=1)
         status_card.columnconfigure(1, weight=0)
-        # Status indicators
+        
+        # Status indicators with tk.Frame
         status_frame = ttk.Frame(status_card, style='Card.TFrame')
         status_frame.grid(row=0, column=0, sticky='w', padx=10)
+        
         self.status_label = ttk.Label(status_frame, 
                                     text="⚫ Monitoring inactive", 
                                     style='Card.TLabel',
                                     font=(DarkTheme.FONT, 12, 'bold'))
         self.status_label.pack(side='left', padx=5)
+        
         self.last_update_label = ttk.Label(status_frame,
                                          text="Last update: Never",
                                          style='Card.TLabel')
         self.last_update_label.pack(side='left', padx=20)
-        # Controls
+        
+        # Controls with tk.Frame
         controls_frame = ttk.Frame(status_card, style='Card.TFrame')
         controls_frame.grid(row=0, column=1, sticky='e', padx=10)
-        self.start_button = ttk.Button(controls_frame, 
-                                     text="▶ Start Monitoring", 
-                                     style='Success.TButton',
-                                     command=self.start_monitoring)
+        
+        self.start_button = customtkinter.CTkButton(
+            controls_frame,
+            text="▶ Start Monitoring",
+            command=self.start_monitoring,
+            fg_color=DarkTheme.SUCCESS,
+            hover_color=DarkTheme.SUCCESS_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=150,
+            **self.button_props
+        )
         self.start_button.pack(side='left', padx=5)
-        self.stop_button = ttk.Button(controls_frame, 
-                                    text="⏹ Stop Monitoring", 
-                                    style='Warning.TButton',
-                                    command=self.start_stop_monitoring)
-        self.reset_button = ttk.Button(controls_frame,
-                                     text="🔄 Reset Logs",
-                                     style='Dark.TButton',
-                                     command=self.reset_logs)
+        
+        self.stop_button = customtkinter.CTkButton(
+            controls_frame,
+            text="⏹ Stop Monitoring",
+            command=self.start_stop_monitoring,
+            fg_color=DarkTheme.WARNING,
+            hover_color=DarkTheme.WARNING_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=150,
+            **self.button_props
+        )
+        
+        self.reset_button = customtkinter.CTkButton(
+            controls_frame,
+            text="🔄 Reset Logs",
+            command=self.reset_logs,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=120,
+            **self.button_props
+        )
         self.reset_button.pack(side='left', padx=5)
+        
         # Camera view card
         camera_card = ttk.Frame(card, style='Card.TFrame')
         camera_card.pack(fill='both', expand=True, pady=20)
         self.monitor_label = ttk.Label(camera_card, style='Card.TLabel', borderwidth=2, relief="solid")
         self.monitor_label.pack(pady=10, padx=10)
+        
         # Detection info card
         info_card = ttk.Frame(card, style='Card.TFrame')
         info_card.pack(fill='x', pady=10)
@@ -271,6 +497,7 @@ class AttendanceGUI:
                                           style='Card.TLabel',
                                           font=(DarkTheme.FONT, 12))
         self.current_detections.pack(side='left', padx=5)
+        
         # Initialize monitoring variables
         self.known_face_encodings = {}
         self.known_face_names = {}
@@ -586,7 +813,7 @@ class AttendanceGUI:
                     # Convert distance to confidence score (0-100%)
                     confidence_score = (1 - face_distance) * 100
                     
-                    if confidence_score > 60:  # 60% confidence threshold
+                    if confidence_score > 30: # 30%confidence threshold
                         if confidence_score > confidence:  # Keep best match
                             confidence = confidence_score
                             student_id = sid
@@ -637,53 +864,183 @@ class AttendanceGUI:
             time.sleep(0.01)  # Small delay to prevent CPU overuse
     
     def setup_reports_tab(self, parent):
-        # Card-like main container
+        # Main container with card style
         card = ttk.Frame(parent, style='Card.TFrame')
         card.pack(fill='both', expand=True, padx=40, pady=40)
-        # Header
-        header = ttk.Label(card, text="Reports", style='Card.TLabel', font=(DarkTheme.FONT, 16, 'bold'))
-        header.pack(anchor='w', pady=(0, 16))
-        # Filters card
-        filters_card = ttk.Frame(card, style='Card.TFrame')
-        filters_card.pack(fill='x', pady=(0, 16))
-        ttk.Label(filters_card, text="Date:", style='Card.TLabel').pack(side='left', padx=5)
+        
+        # Header section
+        header_frame = ttk.Frame(card, style='Card.TFrame')
+        header_frame.pack(fill='x', pady=(0, 20))
+        
+        # Title row
+        title_row = ttk.Frame(header_frame, style='Card.TFrame')
+        title_row.pack(fill='x', pady=(0, 20))
+        
+        ttk.Label(title_row, 
+                 text="Attendance Reports", 
+                 style='Card.TLabel',
+                 font=(DarkTheme.FONT, 24, 'bold')).pack(side='left')
+        
+        # Filters row
+        filters_frame = ttk.Frame(header_frame, style='Card.TFrame')
+        filters_frame.pack(fill='x', pady=(0, 20))
+        
+        # Date filter
+        date_frame = ttk.Frame(filters_frame, style='Card.TFrame')
+        date_frame.pack(side='left', padx=(0, 20))
+        ttk.Label(date_frame, text="Date:", style='Card.TLabel').pack(side='left', padx=(0, 10))
         self.date_var = tk.StringVar(value=datetime.now().strftime('%Y-%m-%d'))
-        ttk.Entry(filters_card, textvariable=self.date_var, style='Dark.TEntry', width=12).pack(side='left', padx=5)
-        ttk.Label(filters_card, text="Event Start (HH:MM):", style='Card.TLabel').pack(side='left', padx=5)
-        self.event_start_time = tk.StringVar(value="14:00")  # Default to 2:00 PM
-        ttk.Entry(filters_card, textvariable=self.event_start_time, style='Dark.TEntry', width=7).pack(side='left', padx=2)
-        ttk.Label(filters_card, text="End:", style='Card.TLabel').pack(side='left', padx=2)
+        date_entry = customtkinter.CTkEntry(
+            date_frame,
+            textvariable=self.date_var,
+            width=120,
+            height=32,
+            fg_color=DarkTheme.BG,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            border_color=DarkTheme.BUTTON_BG
+        )
+        date_entry.pack(side='left')
+        
+        # Time range filter
+        time_frame = ttk.Frame(filters_frame, style='Card.TFrame')
+        time_frame.pack(side='left', padx=20)
+        ttk.Label(time_frame, text="Time Range:", style='Card.TLabel').pack(side='left', padx=(0, 10))
+        
+        self.event_start_time = tk.StringVar(value="09:00")
+        start_entry = customtkinter.CTkEntry(
+            time_frame,
+            textvariable=self.event_start_time,
+            width=70,
+            height=32,
+            fg_color=DarkTheme.BG,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            border_color=DarkTheme.BUTTON_BG
+        )
+        start_entry.pack(side='left', padx=5)
+        
+        ttk.Label(time_frame, text="to", style='Card.TLabel').pack(side='left', padx=5)
+        
         self.event_end_time = tk.StringVar(value="17:00")
-        ttk.Entry(filters_card, textvariable=self.event_end_time, style='Dark.TEntry', width=7).pack(side='left', padx=2)
-        ttk.Label(filters_card, text="Status:", style='Card.TLabel').pack(side='left', padx=5)
+        end_entry = customtkinter.CTkEntry(
+            time_frame,
+            textvariable=self.event_end_time,
+            width=70,
+            height=32,
+            fg_color=DarkTheme.BG,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            border_color=DarkTheme.BUTTON_BG
+        )
+        end_entry.pack(side='left', padx=5)
+        
+        # Status filter
+        status_frame = ttk.Frame(filters_frame, style='Card.TFrame')
+        status_frame.pack(side='left', padx=20)
+        ttk.Label(status_frame, text="Status:", style='Card.TLabel').pack(side='left', padx=(0, 10))
+        
         self.status_var = tk.StringVar(value="ALL")
-        status_menu = ttk.OptionMenu(filters_card, self.status_var, "ALL", 
-                                   "ALL", "PRESENT", "LATE", "LEFT_EARLY", "ABSENT")
-        status_menu.pack(side='left', padx=5)
-        ttk.Button(filters_card, text="Refresh", style='Dark.TButton',
-                  command=self.refresh_report).pack(side='left', padx=5)
-        # Statistics card
-        stats_card = ttk.Frame(card, style='Card.TFrame')
-        stats_card.pack(fill='x', pady=(0, 16))
+        status_menu = customtkinter.CTkOptionMenu(
+            status_frame,
+            values=["ALL", "PRESENT", "LATE", "LEFT_EARLY", "ABSENT"],
+            variable=self.status_var,
+            width=120,
+            height=32,
+            fg_color=DarkTheme.BUTTON_BG,
+            bg_color=DarkTheme.CARD_BG,
+            button_color=DarkTheme.BUTTON_HOVER,
+            button_hover_color=DarkTheme.BUTTON_HOVER,
+            dropdown_fg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=11)
+        )
+        status_menu.pack(side='left')
+        
+        # Refresh button
+        refresh_btn = customtkinter.CTkButton(
+            filters_frame,
+            text="🔄 Refresh",
+            command=self.refresh_report,
+            width=100,
+            height=32,
+            fg_color=DarkTheme.ACCENT,
+            bg_color=DarkTheme.CARD_BG,
+            hover_color=DarkTheme.ACCENT_HOVER,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=11, weight="bold")
+        )
+        refresh_btn.pack(side='right', padx=20)
+        
+        # Stats cards
+        stats_frame = ttk.Frame(card, style='Card.TFrame')
+        stats_frame.pack(fill='x', pady=(0, 20))
+        
+        # Create modern stat cards
         self.stats_labels = {}
-        for status in ['PRESENT', 'LATE', 'LEFT_EARLY', 'ABSENT']:
-            self.stats_labels[status] = ttk.Label(stats_card, 
-                                                text=f"{status}: 0", 
-                                                style='Card.TLabel', font=(DarkTheme.FONT, 12, 'bold'))
-            self.stats_labels[status].pack(side='left', padx=20)
-        # Report table card
-        table_card = ttk.Frame(card, style='Card.TFrame')
-        table_card.pack(fill='both', expand=True, pady=(0, 0))
-        self.tree = ttk.Treeview(table_card, style='Dark.Treeview',
+        stats_data = [
+            ('PRESENT', '🟢', DarkTheme.SUCCESS),
+            ('LATE', '🟡', DarkTheme.WARNING),
+            ('LEFT_EARLY', '🔴', DarkTheme.ERROR),
+            ('ABSENT', '⚫', DarkTheme.BUTTON_BG)
+        ]
+        
+        for status, icon, color in stats_data:
+            stat_card = ttk.Frame(stats_frame, style='Card.TFrame')
+            stat_card.pack(side='left', padx=10, fill='x', expand=True)
+            
+            # Status label with icon
+            ttk.Label(stat_card, 
+                     text=f"{icon} {status}", 
+                     style='Card.TLabel',
+                     foreground=color,
+                     font=(DarkTheme.FONT, 12)).pack(anchor='w', padx=10, pady=(5, 0))
+            
+            # Count label
+            count_label = ttk.Label(stat_card, 
+                                  text="0", 
+                                  style='Card.TLabel',
+                                  foreground=color,
+                                  font=(DarkTheme.FONT, 24, 'bold'))
+            count_label.pack(anchor='w', padx=10, pady=(0, 5))
+            self.stats_labels[status] = count_label
+        
+        # Table frame with modern styling
+        table_frame = ttk.Frame(card, style='Card.TFrame')
+        table_frame.pack(fill='both', expand=True)
+        
+        # Create modern treeview
+        self.tree = ttk.Treeview(table_frame, 
+                                style='Dark.Treeview',
                                 columns=('ID', 'Name', 'Check-in', 'Last Seen', 'Status', 'Time Present'),
-                                show='headings')
-        self.tree.heading('ID', text='Student ID')
-        self.tree.heading('Name', text='Name')
-        self.tree.heading('Check-in', text='Check-in Time')
-        self.tree.heading('Last Seen', text='Last Seen')
-        self.tree.heading('Status', text='Status')
-        self.tree.heading('Time Present', text='Time Present')
-        self.tree.pack(fill='both', expand=True, pady=10)
+                                show='headings',
+                                height=15)
+        
+        # Configure modern column headings
+        columns = [
+            ('ID', 'Student ID', 100),
+            ('Name', 'Name', 200),
+            ('Check-in', 'Check-in Time', 150),
+            ('Last Seen', 'Last Seen', 150),
+            ('Status', 'Status', 120),
+            ('Time Present', 'Time Present', 120)
+        ]
+        
+        for col, heading, width in columns:
+            self.tree.heading(col, text=heading)
+            self.tree.column(col, width=width, anchor='center', stretch=True)
+        
+        # Add modern scrollbar
+        scrollbar = ttk.Scrollbar(table_frame, 
+                                orient='vertical', 
+                                command=self.tree.yview,
+                                style='Dark.Vertical.TScrollbar')
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack table and scrollbar with proper spacing
+        self.tree.pack(side='left', fill='both', expand=True, padx=(10, 0), pady=10)
+        scrollbar.pack(side='right', fill='y', pady=10)
+        
         # Initial load
         self.refresh_report()
     
@@ -851,47 +1208,113 @@ class AttendanceGUI:
         except Exception as e:
             self.root.after(0, lambda: self.show_notification(f"Check-in failed: {str(e)}", level='error'))
     
+    def get_status_display(self, status):
+        """Get the display text and color for a status"""
+        icons = {
+            'PRESENT': '🟢',
+            'LATE': '🟡',
+            'LEFT_EARLY': '🔴',
+            'ABSENT': '⚫'
+        }
+        colors = {
+            'PRESENT': DarkTheme.SUCCESS,
+            'LATE': DarkTheme.WARNING,
+            'LEFT_EARLY': DarkTheme.ERROR,
+            'ABSENT': DarkTheme.BUTTON_BG
+        }
+        if not status or pd.isnull(status) or str(status).lower() == 'nan':
+            status = 'ABSENT'
+        return f"{icons.get(status, '⚫')} {status}", colors.get(status, DarkTheme.BUTTON_BG)
+
     def refresh_report(self):
-        """Refresh the attendance report with filters and statistics, robust to missing columns"""
+        """Refresh the attendance report with filters and statistics"""
+        # Clear existing items
         for item in self.tree.get_children():
             self.tree.delete(item)
+            
         try:
+            # Load and filter data
             df = pd.read_excel(self.attendance_file)
+            
+            # Add missing columns if needed
             required_cols = ['student_id', 'name', 'check_in_time', 'last_seen_time', 'status', 'total_time_present']
             for col in required_cols:
                 if col not in df.columns:
                     if col == 'status':
                         df[col] = 'ABSENT'
                     elif col == 'total_time_present':
-                        df[col] = ''
+                        df[col] = '0:00:00'
                     else:
                         df[col] = ''
+            
+            # Convert timestamps
+            df['check_in_time'] = pd.to_datetime(df['check_in_time'], errors='coerce')
+            df['last_seen_time'] = pd.to_datetime(df['last_seen_time'], errors='coerce')
+            
+            # Apply date filter
             selected_date = self.date_var.get()
             if selected_date:
-                df['check_in_time'] = pd.to_datetime(df['check_in_time'], errors='coerce')
                 df = df[df['check_in_time'].dt.strftime('%Y-%m-%d') == selected_date]
+            
+            # Apply status filter
             selected_status = self.status_var.get()
             if selected_status != "ALL":
                 df = df[df['status'] == selected_status]
-            stats = df['status'].fillna('ABSENT').value_counts()
-            for status in self.stats_labels:
-                count = stats[status] if status in stats else 0
-                self.stats_labels[status].configure(text=f"{status}: {count}")
+            
+            # Remove duplicates keeping the latest entry for each student
+            df = df.sort_values('check_in_time').drop_duplicates('student_id', keep='last')
+            
+            # Update statistics
+            status_counts = {'PRESENT': 0, 'LATE': 0, 'LEFT_EARLY': 0, 'ABSENT': 0}
+            for status in df['status'].fillna('ABSENT'):
+                if status in status_counts:
+                    status_counts[status] += 1
+            
+            # Update status count labels
+            for status, count in status_counts.items():
+                self.stats_labels[status].configure(text=str(count))
+            
+            # Update table with colored status
             for _, row in df.iterrows():
-                badge_text, badge_color = self.get_status_badge(row.get('status', ''))
-                # Use a colored label for status badge
-                self.tree.insert('', 'end', values=(
-                    row.get('student_id', ''),
-                    row.get('name', ''),
-                    row.get('check_in_time', ''),
-                    row.get('last_seen_time', ''),
-                    badge_text,
-                    row.get('total_time_present', '')
-                ), tags=(row.get('status', ''),))
-            # Tag config for status badges
-            for status in ['PRESENT', 'LATE', 'LEFT_EARLY', 'ABSENT', '']:
-                badge_text, badge_color = self.get_status_badge(status)
-                self.tree.tag_configure(status, background=DarkTheme.CARD_BG, foreground=badge_color)
+                status = row.get('status', 'ABSENT')
+                if pd.isnull(status) or status == '':
+                    status = 'ABSENT'
+                    
+                # Format timestamps
+                check_in = row.get('check_in_time', '')
+                last_seen = row.get('last_seen_time', '')
+                if pd.notnull(check_in):
+                    check_in = check_in.strftime('%Y-%m-%d %H:%M:%S')
+                if pd.notnull(last_seen):
+                    last_seen = last_seen.strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Get status display
+                status_text, status_color = self.get_status_display(status)
+                
+                values = (
+                    str(row.get('student_id', '')),
+                    str(row.get('name', '')),
+                    check_in,
+                    last_seen,
+                    status_text,
+                    str(row.get('total_time_present', '0:00:00'))
+                )
+                
+                # Insert with status-based tag
+                item = self.tree.insert('', 'end', values=values, tags=(status,))
+            
+            # Configure status-based colors
+            status_colors = {
+                'PRESENT': DarkTheme.SUCCESS,
+                'LATE': DarkTheme.WARNING,
+                'LEFT_EARLY': DarkTheme.ERROR,
+                'ABSENT': DarkTheme.BUTTON_BG
+            }
+            
+            # Apply tag configurations
+            for status, color in status_colors.items():
+                self.tree.tag_configure(status, foreground=color)
+                
         except Exception as e:
             self.show_notification(f"Failed to refresh report: {str(e)}", level='error')
     
@@ -940,7 +1363,7 @@ class AttendanceGUI:
             '': '#6c757d',
             None: '#6c757d'
         }.get(status, '#6c757d')
-        return f'  {status}  ', color
+        return status, color
 
     def setup_notification_bar(self):
         self.notification_bar = tk.Label(self.root, text='', bg=DarkTheme.NOTIF_BG, fg=DarkTheme.NOTIF_FG, font=(DarkTheme.FONT, 11), anchor='w', padx=20)
