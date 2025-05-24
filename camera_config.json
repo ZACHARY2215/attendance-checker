@@ -1,0 +1,36 @@
+{
+    "check_in_camera": {
+        "source": 0,
+        "type": "usb",
+        "resolution": [1280, 720],
+        "fps": 30
+    },
+    "monitoring_cameras": [
+        {
+            "name": "Camera 1",
+            "source": 1,
+            "type": "usb",
+            "resolution": [1280, 720],
+            "fps": 30,
+            "position": "front"
+        },
+        {
+            "name": "Camera 2",
+            "source": 2,
+            "type": "usb",
+            "resolution": [1280, 720],
+            "fps": 30,
+            "position": "back"
+        }
+    ],
+    "processing": {
+        "skip_frames": 5,
+        "face_detection_interval": 0.5,
+        "min_face_size": [30, 30],
+        "recognition_threshold": 0.6
+    },
+    "logging": {
+        "update_interval": 30,
+        "sheets_sync_interval": 300
+    }
+} 
