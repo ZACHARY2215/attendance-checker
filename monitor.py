@@ -54,8 +54,30 @@ class MonitoringSystem:
     def __init__(self, config_path: str = 'camera_config.json',
                  faces_dir: str = 'faces'):
         # Load configuration
-        with open(config_path, 'r') as f:
-            self.config = json.load(f)
+        try:
+            with open(config_path, 'r') as f:
+                self.config = json.load(f)
+        except FileNotFoundError:
+            # Create default config if not exists
+            self.config = {
+                "monitoring_cameras": [
+                    {
+                        "source": 0,
+                        "name": "Main Camera",
+                        "resolution": [640, 480],
+                        "fps": 30 
+                    }
+                ],
+                "processing": {
+                    "skip_frames": 3,
+                    "recognition_threshold": 0.6
+                },
+                "logging": {
+                    "update_interval": 30
+                }
+            }
+            with open(config_path, 'w') as f:
+                json.dump(self.config, f, indent=2)
         
         self.faces_dir = faces_dir
         self.cameras: Dict[str, CameraStream] = {}
@@ -179,4 +201,4 @@ if __name__ == "__main__":
             time.sleep(1)  # Keep main thread alive
     except KeyboardInterrupt:
         monitor.stop()
-        print("\nMonitoring system closed") 
+        print("\nMonitoring system closed")
