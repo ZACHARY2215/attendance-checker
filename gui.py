@@ -12,6 +12,7 @@ import numpy as np
 import customtkinter
 import tkinter.filedialog as filedialog
 import hashlib
+import json
 
 class DarkTheme:
     BG = '#23272e'
@@ -313,7 +314,10 @@ class AttendanceGUI:
             'LEFT_EARLY': 30,
             'ABSENT': None
         }
-        
+
+        self.checkin_file = 'checkins.json'
+        self.ensure_checkin_file()
+
         # Initialize with login screen
         self.show_login_screen()
     
@@ -321,7 +325,12 @@ class AttendanceGUI:
         if not os.path.exists('users.csv'):
             df = pd.DataFrame([{'username': 'admin', 'password': hashlib.sha256('admin'.encode()).hexdigest(), 'role': 'admin'}])
             df.to_csv('users.csv', index=False)
-    
+    def ensure_checkin_file(self):
+        """Ensure check-in file exists"""
+        if not os.path.exists(self.checkin_file):
+            with open(self.checkin_file, 'w') as f:
+                json.dump({}, f)
+
     def show_login_screen(self):
         """Show login interface in the main window"""
         # Clear any existing widgets
@@ -474,9 +483,6 @@ class AttendanceGUI:
         # Initialize main application
         self.active_tab = 'Check-in'
         self.create_modern_gui()
-        
-        # Start camera automatically on launch
-        self.start_camera()
         
         # Show welcome notification
         self.root.after(500, lambda: self.show_notification(
@@ -679,7 +685,7 @@ class AttendanceGUI:
         if tab == 'Quit':
             self.quit_application()
             return
-            
+        
         self.active_tab = tab
         # Update button styles
         for t, btn in self.sidebar_buttons.items():
@@ -689,7 +695,23 @@ class AttendanceGUI:
                 else:
                     btn.configure(fg_color=DarkTheme.SIDEBAR_BG)
         
+        # Handle camera state when switching tabs
+        if tab == 'Check-in' and hasattr(self, 'checkin_start_button'):
+            # When switching to check-in tab, update the camera button state
+            if self.camera_active:
+                self.update_camera_button_state()
+            else:
+                self.checkin_start_button.configure(
+                    text="Start Camera",
+                    state="normal",
+                    fg_color=DarkTheme.SUCCESS
+                )
+        
         self.show_tab(tab)
+        
+        # Auto-refresh report when switching to Reports tab
+        if tab == 'Reports':
+            self.refresh_report()
         
     def show_tab(self, tab):
         for t, frame in self.tab_frames.items():
@@ -698,7 +720,15 @@ class AttendanceGUI:
         # Auto-refresh report when switching to Reports tab
         if tab == 'Reports':
             self.refresh_report()
-    
+    def update_camera_button_state(self):
+        if hasattr(self, 'checkin_start_button') and hasattr(self, 'camera_active_label'):
+            if self.camera_active:
+                self.checkin_start_button.pack_forget()
+                self.camera_active_label.pack(side='left', padx=5)
+            else:
+                self.camera_active_label.pack_forget()
+                self.checkin_start_button.pack(side='left', padx=5)
+                
     def setup_check_in_tab(self, parent):
         # Card-like main container
         card = ttk.Frame(parent, style='Card.TFrame')
@@ -718,17 +748,18 @@ class AttendanceGUI:
         camera_controls = ttk.Frame(camera_frame, style='Card.TFrame')
         camera_controls.pack(pady=10)
         
-        self.checkin_stop_button = customtkinter.CTkButton(
+        # Add Start Camera button
+        self.checkin_start_button = customtkinter.CTkButton(
             camera_controls,
-            text="Stop Camera",
-            command=self.stop_checkin_camera,
-            fg_color=DarkTheme.WARNING,
-            hover_color=DarkTheme.WARNING_HOVER,
+            text="Start Camera",
+            command=self.start_camera,
+            fg_color=DarkTheme.SUCCESS,
+            hover_color=DarkTheme.SUCCESS_HOVER,
             bg_color=DarkTheme.CARD_BG,
             width=120,
             **self.button_props
         )
-        self.checkin_stop_button.pack(side='left', padx=5)
+        self.checkin_start_button.pack(side='left', padx=5)
         
         # Right side - Registration and Check-in
         control_frame = ttk.Frame(card, style='Card.TFrame')
@@ -736,7 +767,7 @@ class AttendanceGUI:
         
         # Registration section
         reg_header = ttk.Label(control_frame, text="New Student Registration", 
-                             style='Card.TLabel', font=(DarkTheme.FONT, 14, 'bold'))
+                            style='Card.TLabel', font=(DarkTheme.FONT, 14, 'bold'))
         reg_header.pack(anchor='w', pady=(0, 8))
 
         reg_frame = ttk.Frame(control_frame, style='Card.TFrame')
@@ -767,7 +798,7 @@ class AttendanceGUI:
         
         # Check-in section
         checkin_header = ttk.Label(control_frame, text="Check-in", 
-                                 style='Card.TLabel', font=(DarkTheme.FONT, 14, 'bold'))
+                                style='Card.TLabel', font=(DarkTheme.FONT, 14, 'bold'))
         checkin_header.pack(anchor='w', pady=(0, 8))
 
         checkin_frame = ttk.Frame(control_frame, style='Card.TFrame')
@@ -800,7 +831,45 @@ class AttendanceGUI:
             **self.button_props
         )
         checkin_btn.pack(pady=4)
+        
+        # Reset check-ins button
+        reset_checkin_btn = customtkinter.CTkButton(
+            checkin_frame,
+            text="Reset Check-ins",
+            command=self.reset_checkins,
+            fg_color=DarkTheme.WARNING,
+            hover_color=DarkTheme.WARNING_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=200,
+            **self.button_props
+        )
+        reset_checkin_btn.pack(pady=4)
     
+    def reset_checkins(self):
+        """Reset all check-ins"""
+        if messagebox.askyesno("Reset Check-ins", 
+                            "Are you sure you want to reset all check-ins? This cannot be undone."):
+            try:
+                # Clear check-ins file
+                with open(self.checkin_file, 'w') as f:
+                    json.dump({}, f)
+                
+                # Clear attendance file
+                empty_df = pd.DataFrame(columns=[
+                    'student_id', 'name', 'check_in_time', 'last_seen_time', 'status', 'total_time_present'
+                ])
+                empty_df.to_excel(self.attendance_file, index=False)
+                
+                # Clear in-memory data
+                if hasattr(self, 'attendance_df'):
+                    self.attendance_df = empty_df.copy()
+                
+                # Refresh display
+                self.refresh_report()
+                self.show_notification("All check-ins have been reset", level='success')
+                
+            except Exception as e:
+                self.show_notification(f"Failed to reset check-ins: {str(e)}", level='error')
     def setup_monitoring_tab(self, parent):
         # Card-like main container
         card = ttk.Frame(parent, style='Card.TFrame')
@@ -929,6 +998,11 @@ class AttendanceGUI:
             self.camera_thread = threading.Thread(target=self.update_camera_feed)
             self.camera_thread.daemon = True
             self.camera_thread.start()
+            
+            # Update the button state if we're in the check-in tab
+            if self.active_tab == 'Check-in' and hasattr(self, 'checkin_start_button'):
+                self.root.after(0, self.update_camera_button_state)
+                self.show_notification("Camera started successfully", level='success')
     
     def stop_camera(self):
         """Safely stop the camera without blocking"""
@@ -947,6 +1021,7 @@ class AttendanceGUI:
         
         # Schedule camera cleanup in the main thread
         self.root.after(0, cleanup_camera)
+        self.root.after(0, self.update_camera_button_state)
     
     def update_camera_feed(self):
         """Update camera feed with frame skipping for performance"""
@@ -992,7 +1067,7 @@ class AttendanceGUI:
             self.start_monitoring()
     
     def start_monitoring(self):
-        """Start monitoring with proper button management"""
+        """Start monitoring with notification instead of messagebox"""
         if not self.monitoring_active:
             if not self.camera_active:
                 self.start_camera()
@@ -1003,10 +1078,11 @@ class AttendanceGUI:
             self.monitoring_thread.start()
             # Update UI
             self.status_label.configure(text="🟢 Monitoring active",
-                                      foreground=DarkTheme.SUCCESS)
+                                    foreground=DarkTheme.SUCCESS)
             self.start_button.pack_forget()
             self.stop_button.pack(side='left', padx=5)
-            messagebox.showinfo("Monitoring", "Face detection monitoring started")
+            # Replace messagebox with notification
+            self.show_notification("Face detection monitoring started", level='success')
             # Immediately show the current camera frame in the monitoring tab if available
             if self.current_frame is not None:
                 frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
@@ -1015,11 +1091,11 @@ class AttendanceGUI:
                 img_tk = ImageTk.PhotoImage(img)
                 self.monitor_label.configure(image=img_tk)
                 self.monitor_label.image = img_tk
-            # Start periodic monitoring update
+            # Start periodic monitoring update every 30 seconds
             self.monitor_periodic_job = self.root.after(30000, self.periodic_monitor_update)
     
     def stop_monitoring(self):
-        """Stop monitoring without blocking the UI"""
+        """Stop monitoring without blocking the UI - replaced messagebox with notification"""
         if self.monitoring_active:
             self.monitoring_active = False
             # Cancel periodic update if running
@@ -1032,7 +1108,7 @@ class AttendanceGUI:
             stop_thread.start()
             # Update UI immediately
             self.status_label.configure(text="⚫ Monitoring inactive",
-                                      foreground=DarkTheme.FG)
+                                    foreground=DarkTheme.FG)
             self.current_detections.configure(text="No faces detected")
             self.stop_button.pack_forget()
             self.start_button.pack(side='left', padx=5)
@@ -1041,8 +1117,8 @@ class AttendanceGUI:
             self.monitor_label.image = None
             # Save the Excel file on stop
             self.save_attendance_data()
-            # Show completion message
-            self.root.after(500, lambda: messagebox.showinfo("Monitoring", "Monitoring stopped"))
+            # Replace messagebox with notification
+            self.root.after(500, lambda: self.show_notification("Monitoring stopped", level='info'))
     
     def periodic_monitor_update(self):
         """Periodic update for monitoring tab (every 30 seconds)."""
@@ -1054,15 +1130,18 @@ class AttendanceGUI:
             except Exception as e:
                 print(f"Error reading attendance file: {e}")
                 return
+            
             updated = False
             # Update present students
             to_remove = []
+            
             for sid, last_seen in self.present_students_last_seen.items():
                 if sid in df['student_id'].values:
                     idx = df['student_id'] == sid
                     check_in = pd.to_datetime(df.loc[idx, 'check_in_time'].iloc[0])
+                    
                     # If not seen for 30 minutes, mark as LEFT_EARLY and schedule for removal
-                    if (now - last_seen).total_seconds() > 1800:
+                    if (now - last_seen).total_seconds() > 1800:  # 30 minutes
                         if df.loc[idx, 'status'].iloc[0] != 'LEFT_EARLY':
                             df.loc[idx, 'status'] = 'LEFT_EARLY'
                             updated = True
@@ -1070,17 +1149,25 @@ class AttendanceGUI:
                     else:
                         # Update last_seen_time and total_time_present
                         df.loc[idx, 'last_seen_time'] = last_seen
-                        df.loc[idx, 'total_time_present'] = str(last_seen - check_in)
-                        df.loc[idx, 'status'] = self.calculate_attendance_status(check_in, last_seen)
+                        df.loc[idx, 'total_time_present'] = str(last_seen - check_in).split('.')[0]  # Remove microseconds
+                        
+                        # Recalculate status
+                        status = self.calculate_attendance_status(check_in, last_seen)
+                        df.loc[idx, 'status'] = status
                         updated = True
+            
             # Remove students marked as LEFT_EARLY from present_students_last_seen
             for sid in to_remove:
                 del self.present_students_last_seen[sid]
+            
             if updated:
                 df.to_excel(self.attendance_file, index=False)
+                self.attendance_df = df.copy()
+            
             self.refresh_report()
             self.last_update_label.configure(text=f"Last update: {now.strftime('%H:%M:%S')}")
-            # Schedule next update
+            
+            # Schedule next update - every 30 seconds
             self.monitor_periodic_job = self.root.after(30000, self.periodic_monitor_update)
     
     def _stop_monitoring_thread(self):
@@ -1126,52 +1213,75 @@ class AttendanceGUI:
         """Update attendance record with new timestamp and status"""
         try:
             now = datetime.now()
-            # Only update every UPDATE_INTERVAL seconds
-            if (hasattr(self, 'last_update_time') and self.last_update_time is not None and 
-                (now - self.last_update_time).total_seconds() < self.UPDATE_INTERVAL):
+            
+            # Check if student is checked in
+            try:
+                with open(self.checkin_file, 'r') as f:
+                    checkins = json.load(f)
+                if student_id not in checkins:
+                    # Only track students who have checked in
+                    return
+            except:
+                # If checkins file doesn't exist, create it
+                self.ensure_checkin_file()
                 return
+            
             # Load or use in-memory attendance data
             if not hasattr(self, 'attendance_df'):
                 self.attendance_df = pd.read_excel(self.attendance_file)
-            # Get check-in and last seen
+            
+            # Get check-in time
             if student_id in self.attendance_df['student_id'].values:
                 idx = self.attendance_df['student_id'] == student_id
                 check_in = pd.to_datetime(self.attendance_df.loc[idx, 'check_in_time'].iloc[0])
             else:
-                check_in = now
+                # Use check-in time from checkins file
+                check_in_str = checkins[student_id]['checkin_time']
+                check_in = pd.to_datetime(check_in_str)
+            
             last_seen = now
+            
             # Calculate status
             status = self.calculate_attendance_status(check_in, last_seen)
+            
             # Calculate total time present
+            total_time = str(last_seen - check_in).split('.')[0]  # Remove microseconds
+            
             if student_id in self.attendance_df['student_id'].values:
-                total_time = str(last_seen - check_in)
-            else:
-                total_time = "0:00:00"
-            new_row = {
-                'student_id': student_id,
-                'name': name,
-                'check_in_time': check_in,
-                'last_seen_time': last_seen,
-                'status': status,
-                'total_time_present': total_time
-            }
-            if student_id in self.attendance_df['student_id'].values:
-                # Only update last_seen_time, status, and total_time_present
+                # Update existing record
+                idx = self.attendance_df['student_id'] == student_id
                 self.attendance_df.loc[idx, 'last_seen_time'] = last_seen
                 self.attendance_df.loc[idx, 'status'] = status
                 self.attendance_df.loc[idx, 'total_time_present'] = total_time
-                # Do not update check_in_time or name
             else:
+                # Create new record
+                new_row = {
+                    'student_id': student_id,
+                    'name': name,
+                    'check_in_time': check_in,
+                    'last_seen_time': last_seen,
+                    'status': status,
+                    'total_time_present': total_time
+                }
                 self.attendance_df = pd.concat([self.attendance_df, pd.DataFrame([new_row])], 
-                                           ignore_index=True)
-            # Only update the label and report in the GUI
+                                        ignore_index=True)
+            
+            # Update tracking
+            self.present_students_last_seen[student_id] = now
+            
+            # Update UI
             self.last_update_time = now
             self.last_update_label.configure(
                 text=f"Last update: {now.strftime('%H:%M:%S')}"
             )
-            self.refresh_report()
+            
+            # Refresh report if we're on the reports tab
+            if self.active_tab == 'Reports':
+                self.refresh_report()
+                
         except Exception as e:
-            print(f"Error updating attendance: {str(e)}")
+            # Silent error handling
+            pass
     
     def calculate_attendance_status(self, check_in_time, last_seen_time):
         """Calculate attendance status based on event start/end and thresholds"""
@@ -1184,79 +1294,108 @@ class AttendanceGUI:
             event_end = event_date.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
         except Exception:
             # Fallback to 9:00-17:00
-            event_start = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+            event_start = datetime.now().replace(hour=23, minute=0, second=0, microsecond=0)
             event_end = datetime.now().replace(hour=17, minute=0, second=0, microsecond=0)
-        # Late threshold (minutes)
-        late_threshold = self.STATUS_THRESHOLDS['LATE']
+        
+        # Convert to datetime if they're strings
+        if isinstance(check_in_time, str):
+            check_in_time = pd.to_datetime(check_in_time)
+        if isinstance(last_seen_time, str):
+            last_seen_time = pd.to_datetime(last_seen_time)
+        
         # If never checked in
         if pd.isnull(check_in_time):
-            return 'ABSENT'
-        # If checked in after late threshold
-        if (check_in_time - event_start).total_seconds() / 60 > late_threshold:
-            status = 'LATE'
+            return 'ABSENT' 
+        
+        # Determine base status based on check-in time vs event start
+        if check_in_time <= event_start:
+            # Checked in on time or early
+            base_status = 'PRESENT'
         else:
-            status = 'PRESENT'
-        # If left before end
-        if pd.notnull(last_seen_time) and last_seen_time < event_end:
-            # Only mark as left early if last seen is at least 10 minutes before end
-            if (event_end - last_seen_time).total_seconds() > 600:
-                status = 'LEFT_EARLY'
-        return status
+            # Checked in after event start (late)
+            base_status = 'LATE'
+        
+        
+        # If last seen is null or not seen for 30 minutes
+        if pd.isnull(last_seen_time) or (event_end - last_seen_time).total_seconds() > 60:  # 30 minutes
+            # If event is still ongoing, they left early
+            if last_seen_time < event_end:
+                return 'LEFT_EARLY'
+        
+        return base_status
     
     def monitor_faces(self):
-        """Real-time face detection and recognition with performance optimization"""
+        """Real-time face detection and recognition with silent operation"""
         frame_count = 0
         while self.monitoring_active:
             # Wait for a new frame
             if not self.frame_ready.wait(timeout=1.0):
                 continue
             self.frame_ready.clear()
+            
             with self.camera_lock:
                 if self.current_frame is None:
                     continue
                 frame = self.current_frame.copy()
+            
             # Process every 3rd frame for face detection
             frame_count += 1
             if frame_count % 3 != 0:
                 continue
+            
             # Convert to RGB for face_recognition
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             # Reduce frame size for faster processing
             small_frame = cv2.resize(rgb_frame, (0, 0), fx=0.5, fy=0.5)
+            
             # Find faces in frame
             face_locations = face_recognition.face_locations(small_frame, model="hog")
             face_encodings = face_recognition.face_encodings(small_frame, face_locations)
+            
             detected_people = []
             detected_ids = set()
             now = datetime.now()
+            
             # Scale back face locations to original size
             face_locations = [(top * 2, right * 2, bottom * 2, left * 2) 
                             for top, right, bottom, left in face_locations]
+            
             # Process detected faces
             for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-                matches = []
                 name = "Unknown"
                 student_id = None
                 confidence = 0
+                
                 # Check against known faces
                 for sid, known_encoding in self.known_face_encodings.items():
                     # Calculate face distance (lower is better)
                     face_distance = face_recognition.face_distance([known_encoding], face_encoding)[0]
                     # Convert distance to confidence score (0-100%)
                     confidence_score = (1 - face_distance) * 100
-                    if confidence_score > 30: # 30%confidence threshold
+                    
+                    if confidence_score > 30:  # 30% confidence threshold
                         if confidence_score > confidence:  # Keep best match
                             confidence = confidence_score
                             student_id = sid
                             name = self.known_face_names[sid]
+                
                 if student_id:
-                    badge_text, badge_color = self.get_status_badge('PRESENT')
-                    detected_people.append(f"{name} {badge_text}")
-                    detected_ids.add(student_id)
-                    # Update last seen time for this student
-                    self.present_students_last_seen[student_id] = now
-                    # Update attendance
-                    self.update_attendance(student_id, name)
+                    # Check if student is checked in
+                    try:
+                        with open(self.checkin_file, 'r') as f:
+                            checkins = json.load(f)
+                        if student_id in checkins:
+                            detected_people.append(name)
+                            detected_ids.add(student_id)
+                            
+                            # Update last seen time for this student
+                            self.present_students_last_seen[student_id] = now
+                            
+                            # Update attendance silently
+                            self.update_attendance(student_id, name)
+                    except:
+                        pass  # Ignore if checkins file doesn't exist
+                
                 # Draw rectangle with color based on confidence
                 if confidence > 80:
                     color = (0, 255, 0)  # Green for high confidence
@@ -1264,31 +1403,38 @@ class AttendanceGUI:
                     color = (0, 255, 255)  # Yellow for medium confidence
                 else:
                     color = (0, 0, 255)  # Red for unknown/low confidence
+                
                 # Draw rectangle
                 cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+                
                 # Draw name and confidence
                 label = f"{name} ({confidence:.1f}%)" if confidence > 0 else name
                 y = bottom - 15 if top > 20 else top + 15
                 cv2.rectangle(frame, (left, y-20), (right, y), color, cv2.FILLED)
                 font = cv2.FONT_HERSHEY_DUPLEX
                 cv2.putText(frame, label, (left + 6, y-6), font, 0.6, (0, 0, 0), 1)
+            
             # Track currently present students
             self.currently_present_students = detected_ids
-            # Update UI with results
+            
+            # Update UI with results (only show count, not names)
             if detected_people:
                 self.current_detections.configure(
-                    text=f"Detected: {', '.join(detected_people)}"
+                    text=f"Detected: {len(detected_people)} checked-in student(s)"
                 )
             else:
-                self.current_detections.configure(text="No faces detected")
+                self.current_detections.configure(text="No checked-in students detected")
+            
             # Display processed frame
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(frame_rgb)
             img = img.resize((320, 240), Image.Resampling.LANCZOS)
             img_tk = ImageTk.PhotoImage(img)
+            
             if self.monitoring_active:  # Check if still active before updating
                 self.monitor_label.configure(image=img_tk)
                 self.monitor_label.image = img_tk
+            
             time.sleep(0.01)  # Small delay to prevent CPU overuse
     
     def setup_reports_tab(self, parent):
@@ -1368,7 +1514,7 @@ class AttendanceGUI:
         
         ttk.Label(time_frame, text="to", style='Card.TLabel').pack(side='left', padx=5)
         
-        self.event_end_time = tk.StringVar(value="17:00")
+        self.event_end_time = tk.StringVar(value="19:00")
         end_entry = customtkinter.CTkEntry(
             time_frame,
             textvariable=self.event_end_time,
@@ -1699,6 +1845,9 @@ class AttendanceGUI:
                                                           "Failed to stop camera properly"))
     
     def register_student(self):
+        if not self.camera_active:
+            self.show_notification("Please start the camera first", level='error')
+            return
         threading.Thread(target=self.capture_face_thread, daemon=True).start()
         self.show_notification("Registering student...", level='info')
 
@@ -1766,22 +1915,27 @@ class AttendanceGUI:
     
     def process_check_in(self):
         """Process check-in with proper camera handling in a background thread"""
+        
         threading.Thread(target=self.process_check_in_thread, daemon=True).start()
 
     def process_check_in_thread(self):
+        """Process check-in with proper status recording"""
         student_id = self.student_id_var.get()
         if not student_id:
             self.root.after(0, lambda: self.show_notification("Please enter a student ID", level='error'))
             return
+        
         try:
             students_df = pd.read_csv('students.csv') if os.path.exists('students.csv') else pd.DataFrame(columns=['student_id', 'name'])
             student = students_df[students_df['student_id'] == int(student_id)]
             if student.empty:
                 self.root.after(0, lambda: self.show_notification("Student ID not found", level='error'))
                 return
+            
             if not self.camera_active:
                 self.root.after(0, lambda: self.show_notification("Please start the camera first", level='error'))
                 return
+                
             with self.camera_lock:
                 if self.camera is None or not self.camera.isOpened():
                     self.root.after(0, lambda: self.show_notification("Camera is not properly initialized", level='error'))
@@ -1790,81 +1944,132 @@ class AttendanceGUI:
                 if not ret:
                     self.root.after(0, lambda: self.show_notification("Could not capture image from camera", level='error'))
                     return
+            
             encoding_path = os.path.join('faces', f"{student_id}.npy")
             if not os.path.exists(encoding_path):
                 self.root.after(0, lambda: self.show_notification("No face data found for this student. Please register first.", level='error'))
                 return
+            
             face_locations = face_recognition.face_locations(frame)
             if not face_locations:
                 self.root.after(0, lambda: self.show_notification("No face detected in camera", level='error'))
                 return
+            
             current_encoding = face_recognition.face_encodings(frame, face_locations)[0]
             registered_encoding = np.load(encoding_path)
             matches = face_recognition.compare_faces([registered_encoding], current_encoding, tolerance=0.6)
+            
             if not matches[0]:
                 self.root.after(0, lambda: self.show_notification("Face does not match registered student", level='error'))
                 return
+            
+            # Record check-in time
             now = datetime.now()
-            attendance_df = pd.read_excel(self.attendance_file) if os.path.exists(self.attendance_file) else pd.DataFrame(columns=['student_id', 'name', 'check_in_time', 'last_seen_time', 'status', 'total_time_present'])
+            
+            # Save to check-ins file
+            try:
+                with open(self.checkin_file, 'r') as f:
+                    checkins = json.load(f)
+            except:
+                checkins = {}
+            
+            checkins[student_id] = {
+                'name': student.iloc[0]['name'],
+                'checkin_time': now.isoformat(),
+                'date': now.strftime('%Y-%m-%d')
+            }
+            
+            with open(self.checkin_file, 'w') as f:
+                json.dump(checkins, f, indent=2)
+            
+            # Update attendance record
+            attendance_df = pd.read_excel(self.attendance_file) if os.path.exists(self.attendance_file) else pd.DataFrame(columns=[
+                'student_id', 'name', 'check_in_time', 'last_seen_time', 'status', 'total_time_present'
+            ])
+            
+            # Calculate initial status
+            status = self.calculate_attendance_status(now, now)
+            
             new_row = {
                 'student_id': student_id,
                 'name': student.iloc[0]['name'],
                 'check_in_time': now,
-                'last_seen_time': now
+                'last_seen_time': now,
+                'status': status,
+                'total_time_present': '0:00:00'
             }
+            
             if student_id in attendance_df['student_id'].values:
                 attendance_df.loc[attendance_df['student_id'] == student_id] = new_row
             else:
-                attendance_df = pd.concat([attendance_df, pd.DataFrame([new_row])], 
-                                       ignore_index=True)
+                attendance_df = pd.concat([attendance_df, pd.DataFrame([new_row])], ignore_index=True)
+            
             attendance_df.to_excel(self.attendance_file, index=False)
+            
             self.root.after(0, lambda: [
                 self.show_notification("Check-in successful!", level='success'),
                 self.refresh_report()
             ])
+            
         except Exception as e:
             self.root.after(0, lambda: self.show_notification(f"Check-in failed: {str(e)}", level='error'))
+
     
     def get_status_display(self, status):
-        """Get the display text and color for a status"""
-        icons = {
-            'PRESENT': '🟢',
-            'LATE': '🟡',
-            'LEFT_EARLY': '🔴',
-            'ABSENT': '⚫'
+        """Get the display text and color for a status with proper categorization"""
+        status_mapping = {
+            'PRESENT': ('🟢 PRESENT', DarkTheme.SUCCESS),
+            'LATE': ('🟡 LATE', DarkTheme.WARNING),
+            'LEFT_EARLY': ('🔴 LEFT EARLY', DarkTheme.ERROR),
+            'CHECKED_IN': ('🔵 CHECKED IN', DarkTheme.ACCENT),
+            'VERY_LATE': ('🟠 VERY LATE', DarkTheme.ERROR),
+            'NOT_CHECKED_IN': ('⚫ NOT CHECKED IN', DarkTheme.BUTTON_BG),
+            'ABSENT': ('⚫ ABSENT', DarkTheme.BUTTON_BG)
         }
-        colors = {
-            'PRESENT': DarkTheme.SUCCESS,
-            'LATE': DarkTheme.WARNING,
-            'LEFT_EARLY': DarkTheme.ERROR,
-            'ABSENT': DarkTheme.BUTTON_BG
-        }
+        
         if not status or pd.isnull(status) or str(status).lower() == 'nan':
-            status = 'ABSENT'
-        return f"{icons.get(status, '⚫')} {status}", colors.get(status, DarkTheme.BUTTON_BG)
+            status = 'CHECKED_IN'
+        
+        return status_mapping.get(status, ('⚫ UNKNOWN', DarkTheme.BUTTON_BG))
 
     def refresh_report(self):
-        """Refresh the attendance report with filters and statistics"""
+        """Refresh the attendance report with proper status calculation"""
         # Clear existing items
         for item in self.tree.get_children():
             self.tree.delete(item)
+        
         try:
-            # Use in-memory DataFrame if available and monitoring is active
+            # Load check-ins
+            try:
+                with open(self.checkin_file, 'r') as f:
+                    checkins = json.load(f)
+            except:
+                checkins = {}
+            
+            # Load attendance data
             if hasattr(self, 'attendance_df') and self.monitoring_active:
                 df = self.attendance_df.copy()
             else:
-                df = pd.read_excel(self.attendance_file)
+                try:
+                    df = pd.read_excel(self.attendance_file)
+                except FileNotFoundError:
+                    df = pd.DataFrame(columns=[
+                        'student_id', 'name', 'check_in_time', 'last_seen_time',
+                        'status', 'total_time_present'
+                    ])
             
-            # Add missing columns if needed
-            required_cols = ['student_id', 'name', 'check_in_time', 'last_seen_time', 'status', 'total_time_present']
-            for col in required_cols:
-                if col not in df.columns:
-                    if col == 'status':
-                        df[col] = 'ABSENT'
-                    elif col == 'total_time_present':
-                        df[col] = '0:00:00'
-                    else:
-                        df[col] = ''
+            # Parse event times from GUI
+            try:
+                event_date = pd.to_datetime(self.date_var.get())
+                start_hour, start_minute = map(int, self.event_start_time.get().split(":"))
+                end_hour, end_minute = map(int, self.event_end_time.get().split(":"))
+                event_start = event_date.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
+                event_end = event_date.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
+            except Exception:
+                # Fallback
+                today = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+                event_start = today
+                event_end = today.replace(hour=17, minute=0)
             
             # Convert timestamps
             df['check_in_time'] = pd.to_datetime(df['check_in_time'], errors='coerce')
@@ -1874,6 +2079,15 @@ class AttendanceGUI:
             selected_date = self.date_var.get()
             if selected_date:
                 df = df[df['check_in_time'].dt.strftime('%Y-%m-%d') == selected_date]
+            
+            # Recalculate status for all records
+            for idx, row in df.iterrows():
+                check_in = row['check_in_time']
+                last_seen = row['last_seen_time']
+                
+                # Recalculate status
+                status = self.calculate_attendance_status(check_in, last_seen)
+                df.loc[idx, 'status'] = status
             
             # Apply status filter
             selected_status = self.status_var.get()
@@ -1940,6 +2154,10 @@ class AttendanceGUI:
             for status, color in status_colors.items():
                 self.tree.tag_configure(status, foreground=color)
                 
+            # Save updated attendance data
+            if not df.empty:
+                df.to_excel(self.attendance_file, index=False)
+                
         except Exception as e:
             self.show_notification(f"Failed to refresh report: {str(e)}", level='error')
     
@@ -1957,7 +2175,7 @@ class AttendanceGUI:
                         self.root.after_cancel(self.monitor_periodic_job)
                         self.monitor_periodic_job = None
                     self._stop_monitoring_thread()
-                # Stop camera if it's running
+                # Stop camera when quitting (only time camera should stop)
                 self.stop_camera()
                 # Final cleanup
                 if hasattr(self, 'attendance_df'):

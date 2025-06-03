@@ -65,7 +65,7 @@ class MonitoringSystem:
                         "source": 0,
                         "name": "Main Camera",
                         "resolution": [640, 480],
-                        "fps": 30
+                        "fps": 30 
                     }
                 ],
                 "processing": {
@@ -73,7 +73,7 @@ class MonitoringSystem:
                     "recognition_threshold": 0.6
                 },
                 "logging": {
-                    "update_interval": 10
+                    "update_interval": 30
                 }
             }
             with open(config_path, 'w') as f:
