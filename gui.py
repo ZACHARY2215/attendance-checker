@@ -261,6 +261,137 @@ class NotificationPopup:
         self.top.geometry(f'+{x}+{y}')
         self.top.after(duration, self.top.destroy)
 
+class MultiCameraManager:
+    def __init__(self):
+        self.cameras = {}  # Dictionary to store camera objects
+        self.camera_threads = {}  # Dictionary to store camera threads
+        self.camera_locks = {}  # Dictionary to store camera locks
+        self.current_frames = {}  # Dictionary to store current frames
+        self.frame_ready_events = {}  # Dictionary to store frame ready events
+        self.active_cameras = set()  # Set to track active cameras
+        self.available_cameras = self.get_available_cameras()
+        
+    def get_available_cameras(self):
+        """Find available camera devices"""
+        available = []
+        # Try the first 10 indices
+        for i in range(10):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)  # Use DirectShow on Windows
+            if cap.isOpened():
+                available.append(i)
+                cap.release()
+        return available
+        
+    def add_camera(self, camera_id):
+        """Add a new camera with the given ID"""
+        if camera_id in self.cameras:
+            return False
+            
+        try:
+            # For check-in camera (camera_id = -1), use the first available camera
+            if camera_id == -1:
+                if not self.available_cameras:
+                    return False
+                device_id = self.available_cameras[0]
+            else:
+                # For monitoring cameras, use subsequent available cameras
+                if len(self.available_cameras) <= camera_id:
+                    return False
+                device_id = self.available_cameras[camera_id]
+            
+            # Try to open the camera with DirectShow on Windows
+            camera = cv2.VideoCapture(device_id, cv2.CAP_DSHOW)
+            if not camera.isOpened():
+                # Try without DirectShow as fallback
+                camera = cv2.VideoCapture(device_id)
+                if not camera.isOpened():
+                    return False
+                    
+            # Set camera properties
+            camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            camera.set(cv2.CAP_PROP_FPS, 30)
+            camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            
+            self.cameras[camera_id] = camera
+            self.camera_locks[camera_id] = threading.Lock()
+            self.frame_ready_events[camera_id] = threading.Event()
+            self.current_frames[camera_id] = None
+            return True
+            
+        except Exception as e:
+            print(f"Error adding camera {camera_id}: {str(e)}")
+            return False
+    
+    def remove_camera(self, camera_id):
+        """Remove a camera with the given ID"""
+        if camera_id in self.active_cameras:
+            self.stop_camera(camera_id)
+        
+        if camera_id in self.cameras:
+            with self.camera_locks[camera_id]:
+                self.cameras[camera_id].release()
+            del self.cameras[camera_id]
+            del self.camera_locks[camera_id]
+            del self.frame_ready_events[camera_id]
+            del self.current_frames[camera_id]
+    
+    def start_camera(self, camera_id):
+        """Start streaming from a camera"""
+        if camera_id not in self.cameras or camera_id in self.active_cameras:
+            return False
+            
+        self.active_cameras.add(camera_id)
+        thread = threading.Thread(target=self._update_camera_feed, args=(camera_id,))
+        thread.daemon = True
+        self.camera_threads[camera_id] = thread
+        thread.start()
+        return True
+    
+    def stop_camera(self, camera_id):
+        """Stop streaming from a camera"""
+        if camera_id in self.active_cameras:
+            self.active_cameras.remove(camera_id)
+            if camera_id in self.camera_threads:
+                self.camera_threads[camera_id].join(timeout=0.5)
+                del self.camera_threads[camera_id]
+    
+    def _update_camera_feed(self, camera_id):
+        """Update camera feed for a specific camera"""
+        frame_count = 0
+        while camera_id in self.active_cameras:
+            with self.camera_locks[camera_id]:
+                if self.cameras[camera_id] is None or not self.cameras[camera_id].isOpened():
+                    break
+                    
+                ret, frame = self.cameras[camera_id].read()
+                if not ret:
+                    break
+                
+                # Process every 2nd frame for better performance
+                frame_count += 1
+                if frame_count % 2 != 0:
+                    continue
+                
+                self.current_frames[camera_id] = frame.copy()
+                self.frame_ready_events[camera_id].set()
+            
+            time.sleep(0.01)
+    
+    def get_frame(self, camera_id):
+        """Get the current frame from a camera"""
+        if camera_id in self.current_frames:
+            return self.current_frames[camera_id]
+        return None
+    
+    def cleanup(self):
+        """Clean up all camera resources"""
+        for camera_id in list(self.active_cameras):
+            self.stop_camera(camera_id)
+        
+        for camera_id in list(self.cameras.keys()):
+            self.remove_camera(camera_id)
+
 class AttendanceGUI:
     UPDATE_INTERVAL = 30
     
@@ -270,6 +401,9 @@ class AttendanceGUI:
         self.root.geometry("1280x850")
         self.root.configure(bg=DarkTheme.BG)
         self.root.option_add("*Font", f"{DarkTheme.FONT} 11")
+        
+        # Initialize camera manager
+        self.camera_manager = MultiCameraManager()
         
         # User authentication
         self.current_user = None
@@ -291,7 +425,6 @@ class AttendanceGUI:
         }
         
         # Camera and thread control
-        self.camera = None
         self.camera_lock = threading.Lock()
         self.frame_ready = threading.Event()
         self.current_frame = None
@@ -900,12 +1033,26 @@ class AttendanceGUI:
                                          style='Card.TLabel')
         self.last_update_label.pack(side='left', padx=20)
         
-        # Controls
-        controls_frame = ttk.Frame(status_card, style='Card.TFrame')
-        controls_frame.grid(row=0, column=1, sticky='e', padx=10)
+        # Camera controls
+        camera_controls = ttk.Frame(status_card, style='Card.TFrame')
+        camera_controls.grid(row=0, column=1, sticky='e', padx=10)
         
+        # Add camera button
+        add_camera_btn = customtkinter.CTkButton(
+            camera_controls,
+            text="➕ Add Camera",
+            command=self.add_camera,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=120,
+            **self.button_props
+        )
+        add_camera_btn.pack(side='left', padx=5)
+        
+        # Start/Stop monitoring buttons
         self.start_button = customtkinter.CTkButton(
-            controls_frame,
+            camera_controls,
             text="▶ Start Monitoring",
             command=self.start_monitoring,
             fg_color=DarkTheme.SUCCESS,
@@ -917,7 +1064,7 @@ class AttendanceGUI:
         self.start_button.pack(side='left', padx=5)
         
         self.stop_button = customtkinter.CTkButton(
-            controls_frame,
+            camera_controls,
             text="⏹ Stop Monitoring",
             command=self.start_stop_monitoring,
             fg_color=DarkTheme.WARNING,
@@ -928,7 +1075,7 @@ class AttendanceGUI:
         )
         
         self.reset_button = customtkinter.CTkButton(
-            controls_frame,
+            camera_controls,
             text="🔄 Reset Logs",
             command=self.reset_logs,
             fg_color=DarkTheme.BUTTON_BG,
@@ -939,11 +1086,12 @@ class AttendanceGUI:
         )
         self.reset_button.pack(side='left', padx=5)
         
-        # Camera view card
-        camera_card = ttk.Frame(card, style='Card.TFrame')
-        camera_card.pack(fill='both', expand=True, pady=20)
-        self.monitor_label = ttk.Label(camera_card, style='Card.TLabel', borderwidth=2, relief="solid")
-        self.monitor_label.pack(pady=10, padx=10)
+        # Camera grid frame
+        self.camera_grid = ttk.Frame(card, style='Card.TFrame')
+        self.camera_grid.pack(fill='both', expand=True, pady=20)
+        
+        # Camera labels dictionary
+        self.camera_labels = {}
         
         # Detection info card
         info_card = ttk.Frame(card, style='Card.TFrame')
@@ -982,79 +1130,77 @@ class AttendanceGUI:
     
     def start_camera(self):
         """Start the camera feed with proper resource management"""
-        with self.camera_lock:
-            if not self.camera_active:
-                if self.camera is None:
-                    self.camera = cv2.VideoCapture(0)
-                if not self.camera.isOpened():
-                    messagebox.showerror("Error", "Failed to open camera")
-                    return
-                # Set camera properties for better performance
-                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                self.camera.set(cv2.CAP_PROP_FPS, 30)
-                self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            self.camera_active = True
-            self.camera_thread = threading.Thread(target=self.update_camera_feed)
-            self.camera_thread.daemon = True
-            self.camera_thread.start()
+        try:
+            # Use camera ID -1 for check-in camera to differentiate from monitoring cameras
+            camera_id = -1
             
-            # Update the button state if we're in the check-in tab
-            if self.active_tab == 'Check-in' and hasattr(self, 'checkin_start_button'):
-                self.root.after(0, self.update_camera_button_state)
-                self.show_notification("Camera started successfully", level='success')
+            if not self.camera_active:
+                if self.camera_manager.add_camera(camera_id):
+                    self.camera_active = True
+                    self.camera_manager.start_camera(camera_id)
+                    
+                    # Update the button state if we're in the check-in tab
+                    if self.active_tab == 'Check-in' and hasattr(self, 'checkin_start_button'):
+                        self.root.after(0, self.update_camera_button_state)
+                        self.show_notification("Camera started successfully", level='success')
+                        
+                    # Start the camera feed update thread
+                    self.camera_thread = threading.Thread(target=self.update_camera_feed)
+                    self.camera_thread.daemon = True
+                    self.camera_thread.start()
+                else:
+                    if not self.camera_manager.available_cameras:
+                        self.show_notification("No cameras found. Please connect a camera and try again.", level='error')
+                    else:
+                        self.show_notification("Failed to start camera. Please try again.", level='error')
+        except Exception as e:
+            self.show_notification(f"Error starting camera: {str(e)}", level='error')
     
     def stop_camera(self):
         """Safely stop the camera without blocking"""
-        with self.camera_lock:
+        camera_id = -1  # Check-in camera ID
+        
+        if self.camera_active:
             self.camera_active = False
-        
-        def cleanup_camera():
-            with self.camera_lock:
-                if self.camera is not None:
-                    self.camera.release()
-                    self.camera = None
-                # Clear the camera display
-                if hasattr(self, 'camera_label'):
-                    self.camera_label.configure(image='')
-                    self.camera_label.image = None
-        
-        # Schedule camera cleanup in the main thread
-        self.root.after(0, cleanup_camera)
-        self.root.after(0, self.update_camera_button_state)
+            self.camera_manager.stop_camera(camera_id)
+            self.camera_manager.remove_camera(camera_id)
+            
+            # Clear the camera display
+            if hasattr(self, 'camera_label'):
+                self.camera_label.configure(image='')
+                self.camera_label.image = None
+            
+            self.root.after(0, self.update_camera_button_state)
     
     def update_camera_feed(self):
         """Update camera feed with frame skipping for performance"""
+        camera_id = -1  # Check-in camera ID
         frame_count = 0
         
         while self.camera_active:
-            with self.camera_lock:
-                if self.camera is None or not self.camera.isOpened():
-                    break
-                    
-                ret, frame = self.camera.read()
-                if not ret:
-                    break
+            frame = self.camera_manager.get_frame(camera_id)
+            if frame is None:
+                continue
                 
-                # Process every 2nd frame for better performance
-                frame_count += 1
-                if frame_count % 2 != 0:
-                    continue
-                
-                # Store current frame for monitoring
-                self.current_frame = frame.copy()
-                self.frame_ready.set()
-                
-                # Convert and resize for display
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = Image.fromarray(frame_rgb)
-                img = img.resize((320, 240), Image.Resampling.LANCZOS)
-                img_tk = ImageTk.PhotoImage(img)
-                
-                # Update label if still active
-                if self.camera_active and hasattr(self, 'camera_label'):
-                    self.camera_label.configure(image=img_tk)
-                    self.camera_label.image = img_tk
+            # Process every 2nd frame for better performance
+            frame_count += 1
+            if frame_count % 2 != 0:
+                continue
+            
+            # Store current frame for monitoring
+            self.current_frame = frame.copy()
+            self.frame_ready.set()
+            
+            # Convert and resize for display
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(frame_rgb)
+            img = img.resize((320, 240), Image.Resampling.LANCZOS)
+            img_tk = ImageTk.PhotoImage(img)
+            
+            # Update label if still active
+            if self.camera_active and hasattr(self, 'camera_label'):
+                self.camera_label.configure(image=img_tk)
+                self.camera_label.image = img_tk
             
             # Add small delay to reduce CPU usage
             time.sleep(0.01)
@@ -1858,14 +2004,11 @@ class AttendanceGUI:
             self.root.after(0, lambda: self.show_notification("Please enter both Student ID and Name", level='error'))
             return
 
-        with self.camera_lock:
-            if self.camera is None or not self.camera.isOpened():
-                self.root.after(0, lambda: self.show_notification("Camera is not properly initialized", level='error'))
-                return
-            ret, frame = self.camera.read()
-            if not ret:
-                self.root.after(0, lambda: self.show_notification("Failed to capture image from camera", level='error'))
-                return
+        camera_id = -1  # Check-in camera ID
+        frame = self.camera_manager.get_frame(camera_id)
+        if frame is None:
+            self.root.after(0, lambda: self.show_notification("Camera is not properly initialized", level='error'))
+            return
 
         # Detect face
         face_locations = face_recognition.face_locations(frame)
@@ -1936,14 +2079,11 @@ class AttendanceGUI:
                 self.root.after(0, lambda: self.show_notification("Please start the camera first", level='error'))
                 return
                 
-            with self.camera_lock:
-                if self.camera is None or not self.camera.isOpened():
-                    self.root.after(0, lambda: self.show_notification("Camera is not properly initialized", level='error'))
-                    return
-                ret, frame = self.camera.read()
-                if not ret:
-                    self.root.after(0, lambda: self.show_notification("Could not capture image from camera", level='error'))
-                    return
+            camera_id = -1  # Check-in camera ID
+            frame = self.camera_manager.get_frame(camera_id)
+            if frame is None:
+                self.root.after(0, lambda: self.show_notification("Could not capture image from camera", level='error'))
+                return
             
             encoding_path = os.path.join('faces', f"{student_id}.npy")
             if not os.path.exists(encoding_path):
@@ -2162,29 +2302,25 @@ class AttendanceGUI:
             self.show_notification(f"Failed to refresh report: {str(e)}", level='error')
     
     def quit_application(self):
-        """Safely quit the application asynchronously"""
+        """Safely quit the application with proper cleanup"""
         if messagebox.askokcancel("Quit", "Do you want to quit the application?"):
-            # Disable the quit button to prevent multiple clicks
             self.root.protocol('WM_DELETE_WINDOW', lambda: None)
             def cleanup_and_quit_async():
-                # Stop monitoring if active
                 if self.monitoring_active:
                     self.monitoring_active = False
-                    # Cancel periodic update if running
                     if hasattr(self, 'monitor_periodic_job') and self.monitor_periodic_job:
                         self.root.after_cancel(self.monitor_periodic_job)
                         self.monitor_periodic_job = None
                     self._stop_monitoring_thread()
-                # Stop camera when quitting (only time camera should stop)
-                self.stop_camera()
-                # Final cleanup
+                
+                # Clean up camera manager
+                self.camera_manager.cleanup()
+                
                 if hasattr(self, 'attendance_df'):
                     self.attendance_df.to_excel(self.attendance_file, index=False)
-                if hasattr(self, 'camera') and self.camera is not None:
-                    self.camera.release()
-                # Destroy the window in the main thread
+                
                 self.root.after(200, self.root.destroy)
-            # Run cleanup in a background thread
+            
             threading.Thread(target=cleanup_and_quit_async, daemon=True).start()
     
     def __del__(self):
@@ -2521,6 +2657,197 @@ class AttendanceGUI:
         df.to_csv('users.csv', index=False)
         self.load_users_to_tree()
         self.show_notification("User deleted.", level='success')
+
+    def add_camera(self):
+        """Add a new camera to the monitoring grid"""
+        try:
+            # Find next available camera index
+            camera_id = len(self.camera_labels)
+            
+            # Check if we have any available cameras
+            if not self.camera_manager.available_cameras:
+                self.show_notification("No cameras found. Please connect a camera and try again.", level='error')
+                return
+            
+            # Check if we've used all available cameras
+            if camera_id >= len(self.camera_manager.available_cameras):
+                self.show_notification("No more cameras available to add.", level='warning')
+                return
+            
+            if self.camera_manager.add_camera(camera_id):
+                # Calculate grid position
+                row = camera_id // 2
+                col = camera_id % 2
+                
+                # Create label for camera feed
+                label = ttk.Label(self.camera_grid, style='Card.TLabel', borderwidth=2, relief="solid")
+                label.grid(row=row, column=col, padx=10, pady=10, sticky='nsew')
+                
+                # Store label reference
+                self.camera_labels[camera_id] = label
+                
+                # Configure grid weights
+                self.camera_grid.grid_columnconfigure(0, weight=1)
+                self.camera_grid.grid_columnconfigure(1, weight=1)
+                
+                # Start camera if monitoring is active
+                if self.monitoring_active:
+                    self.camera_manager.start_camera(camera_id)
+                
+                self.show_notification(f"Camera {camera_id + 1} added successfully", level='success')
+            else:
+                self.show_notification(f"Failed to add camera {camera_id + 1}. Please try again.", level='error')
+        except Exception as e:
+            self.show_notification(f"Error adding camera: {str(e)}", level='error')
+
+    def start_monitoring(self):
+        """Start monitoring with multiple cameras"""
+        if not self.monitoring_active:
+            if not self.camera_labels:
+                self.show_notification("Please add at least one camera first", level='warning')
+                return
+                
+            self.monitoring_active = True
+            self.present_students_last_seen = {}
+            
+            # Start all cameras
+            for camera_id in self.camera_labels.keys():
+                self.camera_manager.start_camera(camera_id)
+            
+            self.monitoring_thread = threading.Thread(target=self.monitor_faces)
+            self.monitoring_thread.daemon = True
+            self.monitoring_thread.start()
+            
+            # Update UI
+            self.status_label.configure(text="🟢 Monitoring active",
+                                    foreground=DarkTheme.SUCCESS)
+            self.start_button.pack_forget()
+            self.stop_button.pack(side='left', padx=5)
+            
+            self.show_notification("Face detection monitoring started", level='success')
+            
+            # Start periodic monitoring update
+            self.monitor_periodic_job = self.root.after(30000, self.periodic_monitor_update)
+
+    def stop_monitoring(self):
+        """Stop monitoring all cameras"""
+        if self.monitoring_active:
+            self.monitoring_active = False
+            
+            # Cancel periodic update if running
+            if hasattr(self, 'monitor_periodic_job') and self.monitor_periodic_job:
+                self.root.after_cancel(self.monitor_periodic_job)
+                self.monitor_periodic_job = None
+            
+            # Stop all cameras
+            for camera_id in list(self.camera_manager.active_cameras):
+                self.camera_manager.stop_camera(camera_id)
+            
+            # Update UI
+            self.status_label.configure(text="⚫ Monitoring inactive",
+                                    foreground=DarkTheme.FG)
+            self.current_detections.configure(text="No faces detected")
+            self.stop_button.pack_forget()
+            self.start_button.pack(side='left', padx=5)
+            
+            # Clear all camera displays
+            for label in self.camera_labels.values():
+                label.configure(image='')
+                label.image = None
+            
+            # Save attendance data
+            self.save_attendance_data()
+            self.show_notification("Monitoring stopped", level='info')
+
+    def monitor_faces(self):
+        """Monitor faces from all active cameras"""
+        frame_count = 0
+        while self.monitoring_active:
+            frame_count += 1
+            if frame_count % 3 != 0:  # Process every 3rd frame
+                continue
+                
+            detected_people = []
+            detected_ids = set()
+            now = datetime.now()
+            
+            # Process each active camera
+            for camera_id in list(self.camera_manager.active_cameras):
+                frame = self.camera_manager.get_frame(camera_id)
+                if frame is None:
+                    continue
+                
+                # Convert to RGB for face_recognition
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                small_frame = cv2.resize(rgb_frame, (0, 0), fx=0.5, fy=0.5)
+                
+                # Find faces in frame
+                face_locations = face_recognition.face_locations(small_frame, model="hog")
+                face_encodings = face_recognition.face_encodings(small_frame, face_locations)
+                
+                # Scale back face locations
+                face_locations = [(top * 2, right * 2, bottom * 2, left * 2) 
+                                for top, right, bottom, left in face_locations]
+                
+                # Process detected faces
+                for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+                    name = "Unknown"
+                    student_id = None
+                    confidence = 0
+                    
+                    # Check against known faces
+                    for sid, known_encoding in self.known_face_encodings.items():
+                        face_distance = face_recognition.face_distance([known_encoding], face_encoding)[0]
+                        confidence_score = (1 - face_distance) * 100
+                        
+                        if confidence_score > 30:
+                            if confidence_score > confidence:
+                                confidence = confidence_score
+                                student_id = sid
+                                name = self.known_face_names[sid]
+                    
+                    if student_id:
+                        try:
+                            with open(self.checkin_file, 'r') as f:
+                                checkins = json.load(f)
+                            if student_id in checkins:
+                                detected_people.append(name)
+                                detected_ids.add(student_id)
+                                self.present_students_last_seen[student_id] = now
+                                self.update_attendance(student_id, name)
+                        except:
+                            pass
+                    
+                    # Draw rectangle with color based on confidence
+                    color = (0, 255, 0) if confidence > 80 else (0, 255, 255) if confidence > 60 else (0, 0, 255)
+                    cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+                    
+                    # Draw name and confidence
+                    label = f"{name} ({confidence:.1f}%)" if confidence > 0 else name
+                    y = bottom - 15 if top > 20 else top + 15
+                    cv2.rectangle(frame, (left, y-20), (right, y), color, cv2.FILLED)
+                    cv2.putText(frame, label, (left + 6, y-6), cv2.FONT_HERSHEY_DUPLEX, 0.6, (0, 0, 0), 1)
+                
+                # Update camera display
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(frame_rgb)
+                img = img.resize((320, 240), Image.Resampling.LANCZOS)
+                img_tk = ImageTk.PhotoImage(img)
+                
+                if self.monitoring_active and camera_id in self.camera_labels:
+                    self.camera_labels[camera_id].configure(image=img_tk)
+                    self.camera_labels[camera_id].image = img_tk
+            
+            # Update detection info
+            self.currently_present_students = detected_ids
+            if detected_people:
+                self.current_detections.configure(
+                    text=f"Detected: {len(detected_people)} checked-in student(s)"
+                )
+            else:
+                self.current_detections.configure(text="No checked-in students detected")
+            
+            time.sleep(0.01)
 
 if __name__ == "__main__":
     root = tk.Tk()
