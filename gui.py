@@ -398,7 +398,7 @@ class AttendanceGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("AttendEase")
-        self.root.geometry("1500x750")
+        self.root.state('zoomed')  # Start fullscreen (Windows)
         self.root.configure(bg=DarkTheme.BG)
         self.root.option_add("*Font", f"{DarkTheme.FONT} 11")
         
@@ -569,7 +569,21 @@ class AttendanceGUI:
             text_color=DarkTheme.FG,
             font=customtkinter.CTkFont(family=DarkTheme.FONT, size=14, weight="bold")
         )
-        login_btn.pack(pady=(0, 20))
+        login_btn.pack(pady=(0, 10))
+        # Register button
+        register_btn = customtkinter.CTkButton(
+            login_frame,
+            text="Register",
+            command=self.show_register_screen,
+            width=300,
+            height=40,
+            fg_color=DarkTheme.SUCCESS,
+            hover_color=DarkTheme.SUCCESS_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=14, weight="bold")
+        )
+        register_btn.pack(pady=(0, 20))
         
         # Error message label
         self.error_label = tk.Label(
@@ -619,14 +633,14 @@ class AttendanceGUI:
         # Clear login screen
         for widget in self.root.winfo_children():
             widget.destroy()
-        
         # Unbind Enter key
         self.root.unbind('<Return>')
-        
         # Initialize main application
         self.active_tab = 'Check-in'
         self.create_modern_gui()
-        
+        # Ensure Check-in tab is visually selected and displayed
+        if hasattr(self, 'sidebar_buttons') and 'Check-in' in self.sidebar_buttons:
+            self.switch_tab('Check-in')
         # Show welcome notification
         self.root.after(500, lambda: self.show_notification(
             f"Welcome, {self.current_user['username']}!", level='success'
@@ -1437,16 +1451,30 @@ class AttendanceGUI:
     
     def calculate_attendance_status(self, check_in_time, last_seen_time):
         """Calculate attendance status based on event start/end and thresholds"""
-        # Parse event start/end from GUI
+        # Parse event start/end from GUI (12-hour format)
         try:
             event_date = pd.to_datetime(self.date_var.get())
-            start_hour, start_minute = map(int, self.event_start_time.get().split(":"))
-            end_hour, end_minute = map(int, self.event_end_time.get().split(":"))
+            # Start time
+            start_hour = int(self.event_start_hour.get())
+            start_minute = int(self.event_start_minute.get())
+            start_ampm = self.event_start_ampm.get()
+            if start_ampm == "PM" and start_hour != 12:
+                start_hour += 12
+            if start_ampm == "AM" and start_hour == 12:
+                start_hour = 0
+            # End time
+            end_hour = int(self.event_end_hour.get())
+            end_minute = int(self.event_end_minute.get())
+            end_ampm = self.event_end_ampm.get()
+            if end_ampm == "PM" and end_hour != 12:
+                end_hour += 12
+            if end_ampm == "AM" and end_hour == 12:
+                end_hour = 0
             event_start = event_date.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
             event_end = event_date.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
         except Exception:
             # Fallback to 9:00-17:00
-            event_start = datetime.now().replace(hour=23, minute=0, second=0, microsecond=0)
+            event_start = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
             event_end = datetime.now().replace(hour=17, minute=0, second=0, microsecond=0)
         
         # Convert to datetime if they're strings
@@ -1523,10 +1551,10 @@ class AttendanceGUI:
                 for sid, known_encoding in self.known_face_encodings.items():
                     face_distance = face_recognition.face_distance([known_encoding], face_encoding)[0]
                     confidence_score = (1 - face_distance) * 100
-                    if confidence_score > 30 and confidence_score > best_confidence:
+                    if confidence_score > 40 and confidence_score > best_confidence:
                         best_confidence = confidence_score
                         best_sid = sid
-                if best_sid and best_confidence > 50:  # Only accept as known if confidence is high enough
+                if best_sid and best_confidence > 40:  # Only accept as known if confidence is high enough
                     student_id = best_sid
                     name = self.known_face_names[student_id]
                 else:
@@ -1547,7 +1575,7 @@ class AttendanceGUI:
                 # Draw rectangle with color based on confidence
                 if best_confidence > 80:
                     color = (0, 255, 0)
-                elif best_confidence > 50:
+                elif best_confidence > 40:
                     color = (0, 255, 255)
                 else:
                     color = (0, 0, 255)
@@ -1642,34 +1670,66 @@ class AttendanceGUI:
         time_frame = ttk.Frame(filters_frame, style='Card.TFrame')
         time_frame.pack(side='left', padx=20)
         ttk.Label(time_frame, text="Time Range:", style='Card.TLabel').pack(side='left', padx=(0, 10))
-        
-        self.event_start_time = tk.StringVar(value="09:00")
-        start_entry = customtkinter.CTkEntry(
+        # Start time (12-hour format)
+        self.event_start_hour = tk.StringVar(value="09")
+        self.event_start_minute = tk.StringVar(value="00")
+        self.event_start_ampm = tk.StringVar(value="AM")
+        start_hour_entry = customtkinter.CTkEntry(
             time_frame,
-            textvariable=self.event_start_time,
-            width=70,
+            textvariable=self.event_start_hour,
+            width=30,
             height=32,
             fg_color=DarkTheme.BG,
             bg_color=DarkTheme.CARD_BG,
             text_color=DarkTheme.FG,
             border_color=DarkTheme.BUTTON_BG
         )
-        start_entry.pack(side='left', padx=5)
-        
+        start_hour_entry.pack(side='left', padx=(0, 2))
+        ttk.Label(time_frame, text=":", style='Card.TLabel').pack(side='left')
+        start_minute_entry = customtkinter.CTkEntry(
+            time_frame,
+            textvariable=self.event_start_minute,
+            width=30,
+            height=32,
+            fg_color=DarkTheme.BG,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            border_color=DarkTheme.BUTTON_BG
+        )
+        start_minute_entry.pack(side='left', padx=(2, 2))
+        start_ampm_menu = ttk.Combobox(time_frame, textvariable=self.event_start_ampm, values=["AM", "PM"], width=3)
+        start_ampm_menu.pack(side='left', padx=(2, 10))
+        # to
         ttk.Label(time_frame, text="to", style='Card.TLabel').pack(side='left', padx=5)
-        
-        self.event_end_time = tk.StringVar(value="19:00")
-        end_entry = customtkinter.CTkEntry(
+        # End time (12-hour format)
+        self.event_end_hour = tk.StringVar(value="05")
+        self.event_end_minute = tk.StringVar(value="00")
+        self.event_end_ampm = tk.StringVar(value="PM")
+        end_hour_entry = customtkinter.CTkEntry(
             time_frame,
-            textvariable=self.event_end_time,
-            width=70,
+            textvariable=self.event_end_hour,
+            width=30,
             height=32,
             fg_color=DarkTheme.BG,
             bg_color=DarkTheme.CARD_BG,
             text_color=DarkTheme.FG,
             border_color=DarkTheme.BUTTON_BG
         )
-        end_entry.pack(side='left', padx=5)
+        end_hour_entry.pack(side='left', padx=(0, 2))
+        ttk.Label(time_frame, text=":", style='Card.TLabel').pack(side='left')
+        end_minute_entry = customtkinter.CTkEntry(
+            time_frame,
+            textvariable=self.event_end_minute,
+            width=30,
+            height=32,
+            fg_color=DarkTheme.BG,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            border_color=DarkTheme.BUTTON_BG
+        )
+        end_minute_entry.pack(side='left', padx=(2, 2))
+        end_ampm_menu = ttk.Combobox(time_frame, textvariable=self.event_end_ampm, values=["AM", "PM"], width=3)
+        end_ampm_menu.pack(side='left', padx=(2, 0))
         
         # Status filter
         status_frame = ttk.Frame(filters_frame, style='Card.TFrame')
@@ -1796,31 +1856,22 @@ class AttendanceGUI:
         self.refresh_report()
     
     def setup_admin_tab(self, parent):
-        # Make the Admin tab scrollable
-        canvas = tk.Canvas(parent, borderwidth=0, background=DarkTheme.BG, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scroll_frame = ttk.Frame(canvas, style='Dark.TFrame')
-        scroll_frame_id = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-        def on_frame_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        scroll_frame.bind("<Configure>", on_frame_configure)
-        
-        # Place all admin content in scroll_frame instead of parent
-        card = ttk.Frame(scroll_frame, style='Card.TFrame')
+        # Place all admin content directly in parent, double column layout
+        card = ttk.Frame(parent, style='Card.TFrame')
         card.pack(fill='both', expand=True, padx=40, pady=40)
+        card.grid_columnconfigure(0, weight=1)
+        card.grid_columnconfigure(1, weight=1)
+        row = 0
+        # Header and description (span both columns)
         header = ttk.Label(card, text="Admin & Settings", style='Card.TLabel', font=(DarkTheme.FONT, 20, 'bold'))
-        header.pack(anchor='w', pady=(0, 20))
+        header.grid(row=row, column=0, columnspan=2, sticky='w', pady=(0, 20))
+        row += 1
         desc = ttk.Label(card, text="Manage students, correct attendance, schedule events, and configure user roles here.", style='Card.TLabel')
-        desc.pack(anchor='w', pady=(0, 10))
-        
-        # Export/Import controls
+        desc.grid(row=row, column=0, columnspan=2, sticky='w', pady=(0, 10))
+        row += 1
+        # Export/Import controls (left column)
         btn_frame = ttk.Frame(card, style='Card.TFrame')
-        btn_frame.pack(anchor='w', pady=(10, 20))
-        
+        btn_frame.grid(row=row, column=0, sticky='nw', pady=(10, 20), padx=(0, 20))
         export_csv_btn = customtkinter.CTkButton(
             btn_frame,
             text="Export to CSV",
@@ -1832,7 +1883,6 @@ class AttendanceGUI:
             **self.button_props
         )
         export_csv_btn.pack(side='left', padx=5)
-        
         export_pdf_btn = customtkinter.CTkButton(
             btn_frame,
             text="Export to PDF",
@@ -1844,7 +1894,6 @@ class AttendanceGUI:
             **self.button_props
         )
         export_pdf_btn.pack(side='left', padx=5)
-        
         import_csv_btn = customtkinter.CTkButton(
             btn_frame,
             text="Import from CSV",
@@ -1856,25 +1905,20 @@ class AttendanceGUI:
             **self.button_props
         )
         import_csv_btn.pack(side='left', padx=5)
-        
-        # Student Management section
+        # Student Management (left column)
+        row += 1
         student_card = ttk.Frame(card, style='Card.TFrame')
-        student_card.pack(fill='x', pady=(10, 20))
+        student_card.grid(row=row, column=0, sticky='nsew', pady=(10, 20), padx=(0, 20))
         student_header = ttk.Label(student_card, text="Student Management", style='Card.TLabel', font=(DarkTheme.FONT, 16, 'bold'))
         student_header.pack(anchor='w', pady=(0, 10))
-        
-        # Student table
         self.student_tree = ttk.Treeview(student_card, columns=('ID', 'Name'), show='headings', height=6, style='Dark.Treeview')
         self.student_tree.heading('ID', text='Student ID')
         self.student_tree.heading('Name', text='Name')
         self.student_tree.column('ID', width=120, anchor='center')
         self.student_tree.column('Name', width=200, anchor='center')
         self.student_tree.pack(side='left', padx=(0, 10), pady=5)
-        
-        # Student action buttons
         student_btns = ttk.Frame(student_card, style='Card.TFrame')
         student_btns.pack(side='left', padx=10, pady=5)
-        
         edit_btn = customtkinter.CTkButton(
             student_btns,
             text="Edit",
@@ -1886,7 +1930,6 @@ class AttendanceGUI:
             **self.button_props
         )
         edit_btn.pack(pady=2)
-        
         delete_btn = customtkinter.CTkButton(
             student_btns,
             text="Delete",
@@ -1898,7 +1941,6 @@ class AttendanceGUI:
             **self.button_props
         )
         delete_btn.pack(pady=2)
-        
         view_face_btn = customtkinter.CTkButton(
             student_btns,
             text="View Face",
@@ -1910,26 +1952,20 @@ class AttendanceGUI:
             **self.button_props
         )
         view_face_btn.pack(pady=2)
-        
-        # Load students into the table
         self.load_students_to_tree()
-        
-        # User Management section
+        # User Management (right column)
         user_card = ttk.Frame(card, style='Card.TFrame')
-        user_card.pack(fill='x', pady=(10, 20))
+        user_card.grid(row=row, column=1, sticky='nsew', pady=(10, 20), padx=(20, 0))
         user_header = ttk.Label(user_card, text="User Management", style='Card.TLabel', font=(DarkTheme.FONT, 16, 'bold'))
         user_header.pack(anchor='w', pady=(0, 10))
-        
         self.user_tree = ttk.Treeview(user_card, columns=('Username', 'Role'), show='headings', height=5, style='Dark.Treeview')
         self.user_tree.heading('Username', text='Username')
         self.user_tree.heading('Role', text='Role')
         self.user_tree.column('Username', width=140, anchor='center')
         self.user_tree.column('Role', width=80, anchor='center')
         self.user_tree.pack(side='left', padx=(0, 10), pady=5)
-        
         user_btns = ttk.Frame(user_card, style='Card.TFrame')
         user_btns.pack(side='left', padx=10, pady=5, anchor='n')
-        
         add_user_btn = customtkinter.CTkButton(
             user_btns,
             text="Add",
@@ -1941,7 +1977,6 @@ class AttendanceGUI:
             **self.button_props
         )
         add_user_btn.pack(pady=(0, 6), anchor='w')
-        
         edit_user_btn = customtkinter.CTkButton(
             user_btns,
             text="Edit",
@@ -1953,7 +1988,6 @@ class AttendanceGUI:
             **self.button_props
         )
         edit_user_btn.pack(pady=(0, 6), anchor='w')
-        
         delete_user_btn = customtkinter.CTkButton(
             user_btns,
             text="Delete",
@@ -1965,8 +1999,19 @@ class AttendanceGUI:
             **self.button_props
         )
         delete_user_btn.pack(pady=(0, 6), anchor='w')
-        
         self.load_users_to_tree()
+        # Change Password button for current user
+        change_pw_btn = customtkinter.CTkButton(
+            user_card,
+            text="Change Password",
+            command=self.open_change_password_dialog,
+            fg_color=DarkTheme.WARNING,
+            hover_color=DarkTheme.WARNING_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=160,
+            **self.button_props
+        )
+        change_pw_btn.pack(pady=(20, 0), anchor='w')
     
     def stop_checkin_camera(self):
         """Stop camera in check-in tab without blocking"""
@@ -2209,11 +2254,25 @@ class AttendanceGUI:
                         'status', 'total_time_present'
                     ])
             
-            # Parse event times from GUI
+            # Parse event times from GUI (12-hour format)
             try:
                 event_date = pd.to_datetime(self.date_var.get())
-                start_hour, start_minute = map(int, self.event_start_time.get().split(":"))
-                end_hour, end_minute = map(int, self.event_end_time.get().split(":"))
+                # Start time
+                start_hour = int(self.event_start_hour.get())
+                start_minute = int(self.event_start_minute.get())
+                start_ampm = self.event_start_ampm.get()
+                if start_ampm == "PM" and start_hour != 12:
+                    start_hour += 12
+                if start_ampm == "AM" and start_hour == 12:
+                    start_hour = 0
+                # End time
+                end_hour = int(self.event_end_hour.get())
+                end_minute = int(self.event_end_minute.get())
+                end_ampm = self.event_end_ampm.get()
+                if end_ampm == "PM" and end_hour != 12:
+                    end_hour += 12
+                if end_ampm == "AM" and end_hour == 12:
+                    end_hour = 0
                 event_start = event_date.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
                 event_end = event_date.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
             except Exception:
@@ -2811,10 +2870,10 @@ class AttendanceGUI:
                     for sid, known_encoding in self.known_face_encodings.items():
                         face_distance = face_recognition.face_distance([known_encoding], face_encoding)[0]
                         confidence_score = (1 - face_distance) * 100
-                        if confidence_score > 30 and confidence_score > best_confidence:
+                        if confidence_score > 40 and confidence_score > best_confidence:
                             best_confidence = confidence_score
                             best_sid = sid
-                    if best_sid and best_confidence > 50:  # Only accept as known if confidence is high enough
+                    if best_sid and best_confidence > 40:  # Only accept as known if confidence is high enough
                         student_id = best_sid
                         name = self.known_face_names[student_id]
                     else:
@@ -2833,7 +2892,7 @@ class AttendanceGUI:
                         except:
                             pass
                     # Draw rectangle with color based on confidence
-                    color = (0, 255, 0) if confidence > 80 else (0, 255, 255) if confidence > 50 else (0, 0, 255)
+                    color = (0, 255, 0) if confidence > 80 else (0, 255, 255) if confidence > 40 else (0, 0, 255)
                     cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
                     label = f"{name} ({confidence:.1f}%)" if confidence > 0 else name
                     y = bottom - 15 if top > 20 else top + 15
@@ -2860,6 +2919,180 @@ class AttendanceGUI:
                 self.current_detections.configure(text="No checked-in students detected")
             
             time.sleep(0.01)
+
+    def show_register_screen(self):
+        # Clear any existing widgets
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        # Create register container
+        register_container = tk.Frame(self.root, bg=DarkTheme.BG)
+        register_container.pack(fill='both', expand=True)
+        # Center the register form
+        register_frame = tk.Frame(register_container, bg=DarkTheme.CARD_BG, padx=40, pady=40)
+        register_frame.place(relx=0.5, rely=0.5, anchor='center')
+        try:
+            img = Image.open('images/AttendEase_logo.png')
+            img = img.resize((350, 200), Image.Resampling.LANCZOS)
+            img_tk = ImageTk.PhotoImage(img)
+            img_label = tk.Label(register_frame, image=img_tk, bg=DarkTheme.CARD_BG)
+            img_label.image = img_tk
+            img_label.pack(pady=(0, 10))
+        except Exception:
+            pass
+        title_label = tk.Label(
+            register_frame,
+            text="Register New User",
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.FG,
+            font=(DarkTheme.FONT, 24, 'bold')
+        )
+        title_label.pack(pady=(0, 10))
+        subtitle_label = tk.Label(
+            register_frame,
+            text="Fill in the details below to create an account.",
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.FG,
+            font=(DarkTheme.FONT, 10)
+        )
+        subtitle_label.pack(pady=(0, 30))
+        # Username
+        tk.Label(
+            register_frame,
+            text="Username:",
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.FG,
+            font=(DarkTheme.FONT, 12)
+        ).pack(pady=(0, 5))
+        self.reg_username_var = tk.StringVar()
+        username_entry = customtkinter.CTkEntry(
+            register_frame,
+            textvariable=self.reg_username_var,
+            width=300,
+            height=40,
+            fg_color=DarkTheme.BG,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            border_color=DarkTheme.BUTTON_BG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=12)
+        )
+        username_entry.pack(pady=(0, 20))
+        username_entry.focus()
+        # Password
+        tk.Label(
+            register_frame,
+            text="Password:",
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.FG,
+            font=(DarkTheme.FONT, 12)
+        ).pack(pady=(0, 5))
+        self.reg_password_var = tk.StringVar()
+        password_entry = customtkinter.CTkEntry(
+            register_frame,
+            textvariable=self.reg_password_var,
+            width=300,
+            height=40,
+            fg_color=DarkTheme.BG,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            border_color=DarkTheme.BUTTON_BG,
+            show='*',
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=12)
+        )
+        password_entry.pack(pady=(0, 20))
+        # Confirm Password
+        tk.Label(
+            register_frame,
+            text="Confirm Password:",
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.FG,
+            font=(DarkTheme.FONT, 12)
+        ).pack(pady=(0, 5))
+        self.reg_confirm_var = tk.StringVar()
+        confirm_entry = customtkinter.CTkEntry(
+            register_frame,
+            textvariable=self.reg_confirm_var,
+            width=300,
+            height=40,
+            fg_color=DarkTheme.BG,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            border_color=DarkTheme.BUTTON_BG,
+            show='*',
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=12)
+        )
+        confirm_entry.pack(pady=(0, 20))
+        # Role
+        tk.Label(
+            register_frame,
+            text="Role:",
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.FG,
+            font=(DarkTheme.FONT, 12)
+        ).pack(pady=(0, 5))
+        self.reg_role_var = tk.StringVar(value="teacher")
+        role_menu = ttk.Combobox(register_frame, textvariable=self.reg_role_var, values=["teacher", "admin", "guest"])
+        role_menu.pack(pady=(0, 20))
+        # Register button
+        register_btn = customtkinter.CTkButton(
+            register_frame,
+            text="Register",
+            command=self.process_register,
+            width=300,
+            height=40,
+            fg_color=DarkTheme.SUCCESS,
+            hover_color=DarkTheme.SUCCESS_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=14, weight="bold")
+        )
+        register_btn.pack(pady=(0, 10))
+        # Back to Login button
+        back_btn = customtkinter.CTkButton(
+            register_frame,
+            text="Back to Login",
+            command=self.show_login_screen,
+            width=300,
+            height=40,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            text_color=DarkTheme.FG,
+            font=customtkinter.CTkFont(family=DarkTheme.FONT, size=14, weight="bold")
+        )
+        back_btn.pack(pady=(0, 10))
+        # Error message label
+        self.register_error_label = tk.Label(
+            register_frame,
+            text="",
+            bg=DarkTheme.CARD_BG,
+            fg=DarkTheme.ERROR,
+            font=(DarkTheme.FONT, 11)
+        )
+        self.register_error_label.pack()
+
+    def process_register(self):
+        username = self.reg_username_var.get().strip()
+        password = self.reg_password_var.get().strip()
+        confirm = self.reg_confirm_var.get().strip()
+        role = self.reg_role_var.get().strip()
+        if not username or not password or not confirm or not role:
+            self.register_error_label.config(text="All fields are required.")
+            return
+        if password != confirm:
+            self.register_error_label.config(text="Passwords do not match.")
+            return
+        if os.path.exists('users.csv'):
+            df = pd.read_csv('users.csv')
+            if username in df['username'].values:
+                self.register_error_label.config(text="Username already exists.")
+                return
+        else:
+            df = pd.DataFrame(columns=['username', 'password', 'role'])
+        hashed = hashlib.sha256(password.encode()).hexdigest()
+        df = pd.concat([df, pd.DataFrame([{'username': username, 'password': hashed, 'role': role}])], ignore_index=True)
+        df.to_csv('users.csv', index=False)
+        self.show_notification("Registration successful! You can now log in.", level='success')
+        self.show_login_screen()
 
 if __name__ == "__main__":
     root = tk.Tk()
