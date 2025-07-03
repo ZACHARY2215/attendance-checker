@@ -397,8 +397,8 @@ class AttendanceGUI:
     
     def __init__(self, root):
         self.root = root
-        self.root.title("Attendance Monitoring System")
-        self.root.geometry("1280x850")
+        self.root.title("AttendEase")
+        self.root.geometry("1500x750")
         self.root.configure(bg=DarkTheme.BG)
         self.root.option_add("*Font", f"{DarkTheme.FONT} 11")
         
@@ -477,11 +477,21 @@ class AttendanceGUI:
         # Center the login form
         login_frame = tk.Frame(login_container, bg=DarkTheme.CARD_BG, padx=40, pady=40)
         login_frame.place(relx=0.5, rely=0.5, anchor='center')
-        
+
+        try:
+            img = Image.open('images/AttendEase_logo.png')
+            img = img.resize((350, 200), Image.Resampling.LANCZOS)
+            img_tk = ImageTk.PhotoImage(img)
+            img_label = tk.Label(login_frame, image=img_tk, bg=DarkTheme.CARD_BG)
+            img_label.image = img_tk  # Keep a reference
+            img_label.pack(pady=(0, 10))
+
+        except Exception:
+            pass  # If image is missing, just skip
         # Title
         title_label = tk.Label(
             login_frame,
-            text="Attendance Monitoring System",
+            text="AttendEase",
             bg=DarkTheme.CARD_BG,
             fg=DarkTheme.FG,
             font=(DarkTheme.FONT, 24, 'bold')
@@ -728,7 +738,7 @@ class AttendanceGUI:
         header_content = tk.Frame(header, bg=DarkTheme.HEADER_BG)
         header_content.pack(fill='both', expand=True, padx=30, pady=10)
         
-        ttk.Label(header_content, text="Attendance Monitoring System", style='Header.TLabel').pack(side='left')
+        ttk.Label(header_content, text="AttendEase", style='Header.TLabel').pack(side='left')
         
         # User info and logout
         user_frame = tk.Frame(header_content, bg=DarkTheme.HEADER_BG)
@@ -854,13 +864,13 @@ class AttendanceGUI:
         if tab == 'Reports':
             self.refresh_report()
     def update_camera_button_state(self):
-        if hasattr(self, 'checkin_start_button') and hasattr(self, 'camera_active_label'):
+        if hasattr(self, 'checkin_start_button') and hasattr(self, 'checkin_stop_button'):
             if self.camera_active:
-                self.checkin_start_button.pack_forget()
-                self.camera_active_label.pack(side='left', padx=5)
+                self.checkin_start_button.configure(state="disabled")
+                self.checkin_stop_button.configure(state="normal")
             else:
-                self.camera_active_label.pack_forget()
-                self.checkin_start_button.pack(side='left', padx=5)
+                self.checkin_start_button.configure(state="normal")
+                self.checkin_stop_button.configure(state="disabled")
                 
     def setup_check_in_tab(self, parent):
         # Card-like main container
@@ -893,6 +903,20 @@ class AttendanceGUI:
             **self.button_props
         )
         self.checkin_start_button.pack(side='left', padx=5)
+        
+        # Add Stop Camera button
+        self.checkin_stop_button = customtkinter.CTkButton(
+            camera_controls,
+            text="Stop Camera",
+            command=self.stop_camera,
+            fg_color=DarkTheme.ERROR,
+            hover_color=DarkTheme.ERROR_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=120,
+            state="disabled",
+            **self.button_props
+        )
+        self.checkin_stop_button.pack(side='left', padx=5)
         
         # Right side - Registration and Check-in
         control_frame = ttk.Frame(card, style='Card.TFrame')
@@ -1074,18 +1098,6 @@ class AttendanceGUI:
             **self.button_props
         )
         
-        self.reset_button = customtkinter.CTkButton(
-            camera_controls,
-            text="🔄 Reset Logs",
-            command=self.reset_logs,
-            fg_color=DarkTheme.BUTTON_BG,
-            hover_color=DarkTheme.BUTTON_HOVER,
-            bg_color=DarkTheme.CARD_BG,
-            width=120,
-            **self.button_props
-        )
-        self.reset_button.pack(side='left', padx=5)
-        
         # Camera grid frame
         self.camera_grid = ttk.Frame(card, style='Card.TFrame')
         self.camera_grid.pack(fill='both', expand=True, pady=20)
@@ -1131,20 +1143,14 @@ class AttendanceGUI:
     def start_camera(self):
         """Start the camera feed with proper resource management"""
         try:
-            # Use camera ID -1 for check-in camera to differentiate from monitoring cameras
             camera_id = -1
-            
             if not self.camera_active:
                 if self.camera_manager.add_camera(camera_id):
                     self.camera_active = True
                     self.camera_manager.start_camera(camera_id)
-                    
-                    # Update the button state if we're in the check-in tab
                     if self.active_tab == 'Check-in' and hasattr(self, 'checkin_start_button'):
                         self.root.after(0, self.update_camera_button_state)
                         self.show_notification("Camera started successfully", level='success')
-                        
-                    # Start the camera feed update thread
                     self.camera_thread = threading.Thread(target=self.update_camera_feed)
                     self.camera_thread.daemon = True
                     self.camera_thread.start()
@@ -1155,21 +1161,21 @@ class AttendanceGUI:
                         self.show_notification("Failed to start camera. Please try again.", level='error')
         except Exception as e:
             self.show_notification(f"Error starting camera: {str(e)}", level='error')
+        # Always update button state
+        self.root.after(0, self.update_camera_button_state)
     
     def stop_camera(self):
         """Safely stop the camera without blocking"""
         camera_id = -1  # Check-in camera ID
-        
         if self.camera_active:
             self.camera_active = False
             self.camera_manager.stop_camera(camera_id)
             self.camera_manager.remove_camera(camera_id)
-            
-            # Clear the camera display
             if hasattr(self, 'camera_label'):
                 self.camera_label.configure(image='')
                 self.camera_label.image = None
-            
+            self.root.after(0, self.update_camera_button_state)
+        else:
             self.root.after(0, self.update_camera_button_state)
     
     def update_camera_feed(self):
@@ -1511,50 +1517,42 @@ class AttendanceGUI:
                 name = "Unknown"
                 student_id = None
                 confidence = 0
-                
+                best_sid = None
+                best_confidence = 0
                 # Check against known faces
                 for sid, known_encoding in self.known_face_encodings.items():
-                    # Calculate face distance (lower is better)
                     face_distance = face_recognition.face_distance([known_encoding], face_encoding)[0]
-                    # Convert distance to confidence score (0-100%)
                     confidence_score = (1 - face_distance) * 100
-                    
-                    if confidence_score > 30:  # 30% confidence threshold
-                        if confidence_score > confidence:  # Keep best match
-                            confidence = confidence_score
-                            student_id = sid
-                            name = self.known_face_names[sid]
-                
+                    if confidence_score > 30 and confidence_score > best_confidence:
+                        best_confidence = confidence_score
+                        best_sid = sid
+                if best_sid and best_confidence > 50:  # Only accept as known if confidence is high enough
+                    student_id = best_sid
+                    name = self.known_face_names[student_id]
+                else:
+                    name = "Unknown"
+                    student_id = None
+                # Only add to detected_people if matched and checked in
                 if student_id:
-                    # Check if student is checked in
                     try:
                         with open(self.checkin_file, 'r') as f:
                             checkins = json.load(f)
                         if student_id in checkins:
                             detected_people.append(name)
                             detected_ids.add(student_id)
-                            
-                            # Update last seen time for this student
                             self.present_students_last_seen[student_id] = now
-                            
-                            # Update attendance silently
                             self.update_attendance(student_id, name)
                     except:
-                        pass  # Ignore if checkins file doesn't exist
-                
+                        pass
                 # Draw rectangle with color based on confidence
-                if confidence > 80:
-                    color = (0, 255, 0)  # Green for high confidence
-                elif confidence > 60:
-                    color = (0, 255, 255)  # Yellow for medium confidence
+                if best_confidence > 80:
+                    color = (0, 255, 0)
+                elif best_confidence > 50:
+                    color = (0, 255, 255)
                 else:
-                    color = (0, 0, 255)  # Red for unknown/low confidence
-                
-                # Draw rectangle
+                    color = (0, 0, 255)
                 cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-                
-                # Draw name and confidence
-                label = f"{name} ({confidence:.1f}%)" if confidence > 0 else name
+                label = f"{name} ({best_confidence:.1f}%)" if best_confidence > 0 and name != "Unknown" else name
                 y = bottom - 15 if top > 20 else top + 15
                 cv2.rectangle(frame, (left, y-20), (right, y), color, cv2.FILLED)
                 font = cv2.FONT_HERSHEY_DUPLEX
@@ -1697,9 +1695,11 @@ class AttendanceGUI:
         # Add trace for status_var to auto-refresh report
         self.status_var.trace_add('write', lambda *args: self.refresh_report())
         
-        # Refresh button
+        # Refresh and Reset Logs buttons
+        button_frame = ttk.Frame(filters_frame, style='Card.TFrame')
+        button_frame.pack(side='right', padx=20)
         refresh_btn = customtkinter.CTkButton(
-            filters_frame,
+            button_frame,
             text="🔄 Refresh",
             command=self.refresh_report,
             width=100,
@@ -1710,7 +1710,18 @@ class AttendanceGUI:
             text_color=DarkTheme.FG,
             font=customtkinter.CTkFont(family=DarkTheme.FONT, size=11, weight="bold")
         )
-        refresh_btn.pack(side='right', padx=20)
+        refresh_btn.pack(side='left', padx=(0, 10))
+        self.reset_button = customtkinter.CTkButton(
+            button_frame,
+            text="🔄 Reset Logs",
+            command=self.reset_logs,
+            fg_color=DarkTheme.BUTTON_BG,
+            hover_color=DarkTheme.BUTTON_HOVER,
+            bg_color=DarkTheme.CARD_BG,
+            width=120,
+            **self.button_props
+        )
+        self.reset_button.pack(side='left')
         
         # Stats cards
         stats_frame = ttk.Frame(card, style='Card.TFrame')
@@ -2794,18 +2805,22 @@ class AttendanceGUI:
                     name = "Unknown"
                     student_id = None
                     confidence = 0
-                    
+                    best_sid = None
+                    best_confidence = 0
                     # Check against known faces
                     for sid, known_encoding in self.known_face_encodings.items():
                         face_distance = face_recognition.face_distance([known_encoding], face_encoding)[0]
                         confidence_score = (1 - face_distance) * 100
-                        
-                        if confidence_score > 30:
-                            if confidence_score > confidence:
-                                confidence = confidence_score
-                                student_id = sid
-                                name = self.known_face_names[sid]
-                    
+                        if confidence_score > 30 and confidence_score > best_confidence:
+                            best_confidence = confidence_score
+                            best_sid = sid
+                    if best_sid and best_confidence > 50:  # Only accept as known if confidence is high enough
+                        student_id = best_sid
+                        name = self.known_face_names[student_id]
+                    else:
+                        name = "Unknown"
+                        student_id = None
+                    # Only add to detected_people if matched and checked in
                     if student_id:
                         try:
                             with open(self.checkin_file, 'r') as f:
@@ -2817,12 +2832,9 @@ class AttendanceGUI:
                                 self.update_attendance(student_id, name)
                         except:
                             pass
-                    
                     # Draw rectangle with color based on confidence
-                    color = (0, 255, 0) if confidence > 80 else (0, 255, 255) if confidence > 60 else (0, 0, 255)
+                    color = (0, 255, 0) if confidence > 80 else (0, 255, 255) if confidence > 50 else (0, 0, 255)
                     cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-                    
-                    # Draw name and confidence
                     label = f"{name} ({confidence:.1f}%)" if confidence > 0 else name
                     y = bottom - 15 if top > 20 else top + 15
                     cv2.rectangle(frame, (left, y-20), (right, y), color, cv2.FILLED)
